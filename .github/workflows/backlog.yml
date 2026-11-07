@@ -1,0 +1,59 @@
+name: Backlog-Manager
+
+# Legt aus freigegebenen Zielen (backlog/ziele.json auf main, nur per Mensch-PR aenderbar) testbare Issues an und uebergibt sie ueber
+# .github/betrieb/agent_dispatch.py an den Agenten. Alle Limits, der Kill-Switch AGENT_AUTO und die Eignungspruefung gelten unveraendert;
+# der Manager hat keine eigene Freigabe und keine neuen Rechte ausser Issues anzulegen (GITHUB_TOKEN) und das Label per kurzlebigem
+# App-Token zu setzen.
+
+on:
+  # Kein Zeitplan (keine zusaetzlichen regelmaessigen Laeufe, keine Kosten im Leerlauf): Der Manager startet nach jedem erfolgreichen CI-Lauf
+  # auf main (also nach jedem Merge) und von Hand. Er ist idempotent; concurrency verhindert Doppelstarts.
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: backlog-manager
+  cancel-in-progress: false
+
+jobs:
+  backlog:
+    # Uebersprungene Jobs kosten keine Minuten: ohne AGENT_AUTO=on passiert (und kostet) nichts.
+    if: vars.AGENT_AUTO == 'on' && (github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success')
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      actions: read
+      pull-requests: read
+      issues: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+      - name: App-Token (nur Issues)
+        id: app
+        if: ${{ vars.AGENT_APP_ID != '' && vars.AGENT_AUTO == 'on' }}
+        continue-on-error: true
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        with:
+          client-id: ${{ vars.AGENT_APP_ID }}
+          private-key: ${{ secrets.AGENT_APP_KEY }}
+          owner: ${{ github.repository_owner }}
+          repositories: ${{ github.event.repository.name }}
+          github-api-url: ${{ github.api_url }}
+          permission-issues: write
+      - name: Ziele pruefen, Issues anlegen, uebergeben
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          APP_TOKEN: ${{ steps.app.outputs.token }}
+          AGENT_AUTO: ${{ vars.AGENT_AUTO }}
+        run: python .github/betrieb/backlog.py

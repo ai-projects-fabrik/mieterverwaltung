@@ -1,0 +1,57 @@
+name: Agent-Uebergabe
+
+# Uebergibt ein Issue mit Label `agent-kandidat` automatisch an den Agenten (Label `agent`), aber nur wenn .github/betrieb/agent_dispatch.py
+# alle Bedingungen bestaetigt (Kill-Switch Variable AGENT_AUTO=on, Eigentuemer als Autor, Zuschnitt und Akzeptanztest laut
+# Vorlage, hoechstens 50 Agentenlaeufe in 24 h (MAX_LAEUFE_24H), kein offener Agenten-PR, keine Wiederholung). Das Label `agent` setzt das kurzlebige
+# Token der GitHub App (nur dieses Repo, Issues-Schreibrecht), weil Ereignisse des GITHUB_TOKEN keinen Workflow starten.
+# Der Issue-Text wird nur als Daten gelesen. Code kommt ausschliesslich vom Standard-Branch (issues-Ereignis).
+
+on:
+  issues:
+    types: [labeled]
+
+permissions: {}
+
+# Je Issue eine eigene Gruppe: mehrere gleichzeitig gesetzte Labels loesen sich nicht mehr gegenseitig ab (eine globale Gruppe
+# haelt nur EINEN wartenden Lauf und brach die uebrigen ab). Die Tages- und Kostengrenzen bleiben hart; das Limit paralleler
+# Issues kann bei exakt gleichzeitigem Labeln um die Zahl der gleichzeitigen Labels ueberschritten werden (weicher Wert).
+concurrency:
+  group: agent-uebergabe-${{ github.event.issue.number }}
+  cancel-in-progress: false
+
+jobs:
+  uebergabe:
+    if: github.event.label.name == 'agent-kandidat'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      actions: read
+      pull-requests: read
+      issues: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+      - name: App-Token (nur Issues)
+        id: app
+        if: ${{ vars.AGENT_APP_ID != '' && vars.AGENT_AUTO == 'on' }}
+        continue-on-error: true
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        with:
+          client-id: ${{ vars.AGENT_APP_ID }}
+          private-key: ${{ secrets.AGENT_APP_KEY }}
+          owner: ${{ github.repository_owner }}
+          repositories: ${{ github.event.repository.name }}
+          github-api-url: ${{ github.api_url }}
+          permission-issues: write
+      - name: Pruefen und uebergeben
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          APP_TOKEN: ${{ steps.app.outputs.token }}
+          AGENT_AUTO: ${{ vars.AGENT_AUTO }}
+        run: python .github/betrieb/agent_dispatch.py "${{ github.event.issue.number }}"

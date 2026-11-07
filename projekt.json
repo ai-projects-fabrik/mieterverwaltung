@@ -1,0 +1,9 @@
+{
+ "name": "mieterverwaltung",
+ "konto": "ai-projects-fabrik",
+ "sichtbarkeit": "public",
+ "anbieter": "deepseek-codex",
+ "datenklasse": "oeffentlich-tauglich",
+ "email": "noreply@example.invalid",
+ "org": "ai-projects-fabrik"
+}

@@ -1,0 +1,45 @@
+[
+  {
+    "id": "mv-felder",
+    "titel": "Feldschema und Normalisierung (Modul felder)",
+    "freigegeben": true,
+    "abhaengig_von": [],
+    "text": "**Datei:** `src/projekt/felder.py` `tests/test_felder.py`\n**Akzeptanztest:** `tests/akzeptanz/test_felder.py`\n\nNeues Modul `projekt.felder`: die veraenderlichen Stellen eines Mietvertrags und ihre Pruefung.\n\n**Modulvertrag:** `FELDER: tuple[str, ...]` = (`mieter_name`, `objekt`, `mietbeginn`, `miete_netto`, `nebenkosten`, `kaution`) in dieser Reihenfolge; `normalisiere(daten: dict) -> dict[str, str]`.\n\n**Regeln**\n- Nur Standardbibliothek. Es werden nur die uebergebenen Felder geprueft; fehlende Felder sind erlaubt. Die Eingabe wird nicht veraendert.\n- `mieter_name`, `objekt`: `str`, getrimmt, 1 bis 120 Zeichen, ohne `{{` oder `}}` (Platzhalter-Einschleusung).\n- `mietbeginn`: `YYYY-MM-DD` oder `D.M.YYYY` (echtes Kalenderdatum), Ausgabe `DD.MM.YYYY`.\n- `miete_netto`, `nebenkosten`, `kaution`: `int` oder `str` (optional `CHF`-Praefix, Apostroph als Tausendertrenner, Punkt als Dezimaltrenner, hoechstens 2 Stellen, nicht negativ); `float`, `bool`, Komma-Dezimal und `None` sind ungueltig. Ausgabe immer mit zwei Nachkommastellen und Apostroph-Tausendern (`1'250.50`).\n- Unbekannte Felder, falsche Typen oder ein Nicht-dict: `ValueError`.\n\n**Acceptance Criteria**\n- Beispiele wortgleich in `tests/akzeptanz/test_felder.py` (Mensch-gemergt, nicht aendern).\n- Eigene Tests in `tests/test_felder.py` ergaenzen Grenzwerte; nur synthetische Daten, kein Netzwerk.\n"
+  },
+  {
+    "id": "mv-docx-fuellen",
+    "titel": "Platzhalter in Word-Vorlagen fuellen (Modul docx_fuellen)",
+    "freigegeben": true,
+    "abhaengig_von": [],
+    "text": "**Datei:** `src/projekt/docx_fuellen.py` `tests/test_docx_fuellen.py`\n**Akzeptanztest:** `tests/akzeptanz/test_docx_fuellen.py`\n\nNeues Modul `projekt.docx_fuellen`: Platzhalter `{{feldname}}` in einer .docx-Vorlage finden und ersetzen, ohne Fremdpakete (zipfile + XML).\n\n**Modulvertrag:** `platzhalter(docx: bytes) -> list[str]` (sortiert, ohne Duplikate); `fuelle(docx: bytes, werte: dict[str, str]) -> bytes`.\n\n**Regeln**\n- Nur Standardbibliothek. Nur `word/document.xml` wird gelesen und neu geschrieben, alle anderen Dateien des Pakets bleiben byte-gleich.\n- Platzhalter `{{name}}` (Kleinbuchstaben und Unterstrich) koennen in Word ueber mehrere Runs (`w:r`) eines Absatzes verteilt sein; sie werden je Absatz erkannt und ersetzt. Dabei bleibt der uebrige Absatztext erhalten; die Zeichenformatierung des ersten Runs genuegt.\n- Werte werden XML-escaped. Platzhalter ohne Wert bleiben unveraendert stehen. Kommt ein Platzhalter mehrfach vor, werden alle ersetzt.\n- Kein gueltiges docx (kein Zip, kein `word/document.xml`) oder ein Wert, der kein `str` ist: `ValueError`.\n\n**Acceptance Criteria**\n- Beispiele wortgleich in `tests/akzeptanz/test_docx_fuellen.py` (Mensch-gemergt, nicht aendern).\n- Eigene Tests in `tests/test_docx_fuellen.py` ergaenzen Grenzwerte; nur synthetische Daten, kein Netzwerk.\n"
+  },
+  {
+    "id": "mv-anfrage",
+    "titel": "Aenderungen aus Anfragetext lesen (Modul anfrage)",
+    "freigegeben": true,
+    "abhaengig_von": [
+      "mv-felder"
+    ],
+    "text": "**Datei:** `src/projekt/anfrage.py` `tests/test_anfrage.py`\n**Akzeptanztest:** `tests/akzeptanz/test_anfrage.py`\n\nNeues Modul `projekt.anfrage`: Zeilen `Feld: Wert` aus dem Text einer Mieter-Anfrage lesen. Freitext-Auswertung (KI) ist bewusst nicht Teil dieses Moduls.\n\n**Modulvertrag:** `aenderungen_aus_text(text: str) -> dict[str, str]`. Nur oeffentliche Namen aus `projekt.felder` nutzen.\n\n**Regeln**\n- Jede Zeile wird beim ersten `:` geteilt. Der Schluessel wird getrimmt, kleingeschrieben, Leerzeichen werden zu `_`; ist er ein Name aus `FELDER`, zaehlt die Zeile, sonst wird sie ignoriert (Prosa).\n- Zeilen, die nach fuehrendem Leerraum mit `>` beginnen (zitierter Text), werden ignoriert. Zeilenenden `\\n` und `\\r\\n` sind gleichwertig.\n- Der Wert wird mit `normalisiere` geprueft; bei Fehler `ValueError`, dessen Text den Feldnamen enthaelt. Dasselbe Feld mit verschiedenen normalisierten Werten: `ValueError` mit Feldnamen; mit gleichem Wert ist es einmal enthalten.\n- Kein `str`: `ValueError`.\n\n**Acceptance Criteria**\n- Beispiele wortgleich in `tests/akzeptanz/test_anfrage.py` (Mensch-gemergt, nicht aendern).\n- Eigene Tests in `tests/test_anfrage.py` ergaenzen Grenzwerte; nur synthetische Daten, kein Netzwerk.\n"
+  },
+  {
+    "id": "mv-bericht",
+    "titel": "Aenderungsbericht (Modul bericht)",
+    "freigegeben": true,
+    "abhaengig_von": [
+      "mv-felder"
+    ],
+    "text": "**Datei:** `src/projekt/bericht.py` `tests/test_bericht.py`\n**Akzeptanztest:** `tests/akzeptanz/test_bericht.py`\n\nNeues Modul `projekt.bericht`: Unterschiede zwischen altem und neuem Feldstand als Text fuer die Pruefung durch den Menschen.\n\n**Modulvertrag:** `bericht(alt: dict, neu: dict) -> str`. Nur oeffentliche Namen aus `projekt.felder` nutzen.\n\n**Regeln**\n- Je geaendertem Feld eine Zeile `feld: alt -> neu` in der Reihenfolge von `FELDER`; fehlt ein Wert, steht `(leer)`. Zeilen mit `\\n` verbunden, kein Zeilenende am Schluss.\n- Unveraenderte Felder fehlen. Ohne Unterschied lautet das Ergebnis `keine Aenderungen`.\n- Schluessel ausserhalb von `FELDER` oder ein Nicht-dict: `ValueError`.\n\n**Acceptance Criteria**\n- Beispiele wortgleich in `tests/akzeptanz/test_bericht.py` (Mensch-gemergt, nicht aendern).\n- Eigene Tests in `tests/test_bericht.py` ergaenzen Grenzwerte; nur synthetische Daten, kein Netzwerk.\n"
+  },
+  {
+    "id": "mv-cli",
+    "titel": "Kommandozeile und Selbsttest (Modul cli)",
+    "freigegeben": true,
+    "abhaengig_von": [
+      "mv-docx-fuellen",
+      "mv-anfrage",
+      "mv-bericht"
+    ],
+    "text": "**Datei:** `src/projekt/cli.py` `tests/test_cli.py`\n**Akzeptanztest:** `tests/akzeptanz/test_cli.py`\n\nNeues Modul `projekt.cli`: Vertragsvorlage mit dem Bestand und optional einer Anfrage zu einem neuen Vertrag zusammensetzen. Gmail-Anbindung gehoert NICHT dazu (laeuft lokal, ausserhalb des Agentenbaus).\n\n**Modulvertrag:** `main(argv: list[str] | None = None) -> int`; Aufruf auch per `python -m projekt.cli`. Nur oeffentliche Namen aus `projekt.felder`, `projekt.docx_fuellen`, `projekt.anfrage` und `projekt.bericht` nutzen.\n\n**Regeln**\n- Optionen `--vorlage PFAD` (.docx), `--daten PFAD` (JSON-Objekt mit dem Bestand, wird mit `normalisiere` geprueft), `--ausgabe PFAD` (.docx), optional `--anfrage PFAD` (UTF-8-Text). Fehlt `--vorlage`, `--daten` oder `--ausgabe` oder ist eine Option unbekannt: Meldung auf stderr, Rueckgabe 2, keine Ausnahme.\n- Ablauf: Bestand lesen, bei `--anfrage` die Aenderungen darueberlegen, Vorlage fuellen, Ausgabe schreiben, den `bericht` (alt gegen neu) auf stdout ausgeben, Rueckgabe 0.\n- Fehler (Datei fehlt oder unlesbar, ungueltiges JSON, `ValueError` aus den Modulen, Platzhalter der Vorlage ohne Wert, dann nennt die Meldung auf stderr die fehlenden Feldnamen): Meldung auf stderr, Rueckgabe 1, keine Ausgabedatei.\n- Eine vorhandene Ausgabedatei wird nie ueberschrieben (Rueckgabe 1, Datei unveraendert).\n- `--selbsttest`: arbeitet ohne Dateien und Netzwerk eine eingebaute Mini-Vorlage im Speicher durch; bei Erfolg Zeile `Selbsttest OK` auf stdout und Rueckgabe 0, sonst 1.\n\n**Acceptance Criteria**\n- Beispiele wortgleich in `tests/akzeptanz/test_cli.py` (Mensch-gemergt, nicht aendern).\n- Eigene Tests in `tests/test_cli.py` ergaenzen Grenzwerte; nur synthetische Daten, kein Netzwerk.\n"
+  }
+]

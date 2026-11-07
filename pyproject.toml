@@ -1,0 +1,29 @@
+[project]
+name = "projekt"
+version = "0.1.0"
+description = "Mietvertrag per Anfrage auf den aktuellen Mieter anpassen (Vorlage .docx, Platzhalter, Aenderungsbericht)"
+requires-python = ">=3.12"
+dependencies = []
+
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]
+addopts = "-q"
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP"]
+
+[tool.ruff.lint.per-file-ignores]
+# Geschuetzte Specs: Die Import-Einordnung haengt davon ab, welche Module schon existieren.
+"tests/akzeptanz/*" = ["I001"]

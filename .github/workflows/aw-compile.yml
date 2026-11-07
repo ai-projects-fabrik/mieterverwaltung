@@ -1,0 +1,85 @@
+# gh-aw compile auf einem GitHub-Runner statt lokal (Windows: gh-aw.exe blockiert Smart App Control, kein WSL noetig).
+# Version, Release-Digest und Action-Tag stehen in .github/aw/gh-aw-release.env. Das Binary wird nur nach
+# erfolgreichem Digest-Vergleich ausgefuehrt. Das Ergebnis ist ein Artefakt; der Lock-Commit bleibt ein bewusster
+# Schritt im PR. Solange noch kein Lock committet ist, meldet "Abweichungen" rot (neue Datei): Artefakt laden und committen.
+name: aw-compile
+on:
+  workflow_dispatch:
+    inputs:
+      approve:
+        description: "Neue Secrets/Actions freigeben (--approve), nur nach Diff-Pruefung"
+        type: boolean
+        default: false
+  pull_request:
+    paths:
+      - ".github/workflows/*.md"
+      - ".github/workflows/shared/**"
+      - ".github/workflows/*.lock.yml"
+      - ".github/aw/**"
+      - ".github/workflows/aw-compile.yml"
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/*.md"
+      - ".github/workflows/shared/**"
+      - ".github/workflows/*.lock.yml"
+      - ".github/aw/**"
+      - ".github/workflows/aw-compile.yml"
+permissions:
+  contents: read
+concurrency:
+  group: aw-compile-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  compile:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Release-Pins lesen
+        run: |
+          set -euo pipefail
+          zeilen=$(grep -E '^(GH_AW_VERSION=v[0-9]+\.[0-9]+\.[0-9]+|GH_AW_SHA256=[0-9a-f]{64}|GH_AW_ACTION_TAG=[0-9a-f]{40})$' .github/aw/gh-aw-release.env || true)
+          if [ "$(printf '%s\n' "$zeilen" | grep -c .)" -ne 3 ]; then
+            echo "gh-aw-release.env muss genau GH_AW_VERSION, GH_AW_SHA256 und GH_AW_ACTION_TAG enthalten."
+            exit 1
+          fi
+          printf '%s\n' "$zeilen" >> "$GITHUB_ENV"
+      - name: gh-aw laden und Digest pruefen
+        run: |
+          set -euo pipefail
+          curl -fsSL -o "$RUNNER_TEMP/gh-aw" "https://github.com/github/gh-aw/releases/download/${GH_AW_VERSION}/linux-amd64"
+          echo "${GH_AW_SHA256}  $RUNNER_TEMP/gh-aw" | sha256sum -c -
+          chmod +x "$RUNNER_TEMP/gh-aw"
+      - name: Vorher
+        run: sha256sum .github/workflows/*.lock.yml .github/aw/actions-lock.json || true
+      - name: Kompilieren
+        env:
+          GH_TOKEN: ${{ github.token }}
+          APPROVE: ${{ inputs.approve && '--approve' || '' }}
+        run: |
+          set -euo pipefail
+          "$RUNNER_TEMP/gh-aw" compile --action-mode action --action-tag "$GH_AW_ACTION_TAG" --actionlint --zizmor --poutine $APPROVE
+      - name: Nachher
+        run: sha256sum .github/workflows/*.lock.yml .github/aw/actions-lock.json
+      - name: Abweichungen
+        run: |
+          set -euo pipefail
+          if [ -n "$(git status --porcelain -- .github)" ]; then
+            echo "Lock nicht frisch kompiliert, abweichende Dateien:"
+            git status --porcelain -- .github
+            git diff --stat -- .github
+            exit 1
+          fi
+          echo "Lock-Dateien stimmen mit den Quellen ueberein."
+      - name: Ergebnis als Artefakt
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: aw-compile
+          path: |
+            .github/workflows/*.lock.yml
+            .github/aw/
+          if-no-files-found: error

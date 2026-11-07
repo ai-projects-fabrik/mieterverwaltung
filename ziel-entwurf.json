@@ -1,0 +1,58 @@
+{
+  "titel": "Mieterverwaltung: Mietvertrag per Anfrage auf den aktuellen Mieter anpassen",
+  "projekte": [
+    "mieterverwaltung"
+  ],
+  "beschreibung": "Werkzeug (Python, nur Standardbibliothek), das eine Mietvertrags-Vorlage (.docx mit Platzhaltern) mit dem Bestand eines Mieters und den Aenderungen aus einer Anfrage fuellt und einen Aenderungsbericht ausgibt. Fuenf Stufen felder, docx_fuellen, anfrage, bericht, cli aus backlog/ziele.json, je Stufe ein Agenten-PR mit Gate-Merge; Akzeptanztests liegen vorab in tests/akzeptanz. Das Repo enthaelt nur Code und erfundene Testdaten; echte Vertraege, Mieterdaten und der Gmail-Zugang bleiben lokal und nie im Repo. Autorisierung umfasst ausdruecklich: Repo-Anlage ai-projects-fabrik/mieterverwaltung (public), allow_auto_merge und AGENT_AUTO=on, bezahlte Agentenlaeufe bis zum Budget von max_usd 1.0 USD; die Specs in tests/akzeptanz sind gebunden (sha256 0d229c1add1649b0bcb9b4a75731eee39c21d68659289848682e9636ae841ddd).",
+  "erfolgskriterien": [
+    {
+      "id": "k0",
+      "art": "befehl",
+      "befehl": [
+        "C:\\Users\\NEO\\AppData\\Local\\Programs\\Python\\Python312\\python.exe",
+        "-c",
+        "import hashlib, pathlib; r = pathlib.Path('tests/akzeptanz'); h = hashlib.sha256(); [h.update(p.relative_to(r).as_posix().encode() + b'\\0' + p.read_bytes().replace(b'\\r\\n', b'\\n') + b'\\0') for p in sorted(x for x in r.rglob('*') if x.is_file() and '__pycache__' not in x.parts and x.suffix != '.pyc')]; raise SystemExit(0 if h.hexdigest() == '0d229c1add1649b0bcb9b4a75731eee39c21d68659289848682e9636ae841ddd' else 1)"
+      ],
+      "projekt": "mieterverwaltung"
+    },
+    {
+      "id": "k1",
+      "art": "befehl",
+      "befehl": [
+        "C:\\Users\\NEO\\AppData\\Local\\Programs\\Python\\Python312\\python.exe",
+        "-m",
+        "pytest",
+        "-q",
+        "tests/akzeptanz"
+      ],
+      "projekt": "mieterverwaltung"
+    },
+    {
+      "id": "k2",
+      "art": "befehl",
+      "befehl": [
+        "C:\\Users\\NEO\\AppData\\Local\\Programs\\Python\\Python312\\python.exe",
+        "-m",
+        "pytest",
+        "-q"
+      ],
+      "projekt": "mieterverwaltung"
+    },
+    {
+      "id": "k3",
+      "art": "befehl",
+      "befehl": [
+        "C:\\Users\\NEO\\AppData\\Local\\Programs\\Python\\Python312\\python.exe",
+        "-c",
+        "import sys; sys.path.insert(0, 'src'); from projekt.cli import main; raise SystemExit(main(['--selbsttest']))"
+      ],
+      "projekt": "mieterverwaltung"
+    }
+  ],
+  "budget": {
+    "max_runden": 8,
+    "max_usd": 1.0,
+    "max_offene_einheiten": 3,
+    "frist": "2026-11-21"
+  }
+}
