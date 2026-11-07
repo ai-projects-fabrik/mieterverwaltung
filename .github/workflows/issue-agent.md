@@ -16,7 +16,7 @@ imports:
 # Konservatives Standardbudget (1 AIC = 0.01 USD): Agent 6 + Pruefjob 2 AIC je Lauf (0.08 USD), 20 AIC je 24 h.
 # Reale Laeufe: Median ca. 1.2, Maximum 3.1 AIC. Erhoehen nur bewusst je Projekt (Neukompilieren noetig).
 timeout-minutes: 30
-max-ai-credits: 6
+max-ai-credits: 12
 max-daily-ai-credits: 20
 network:
   allowed:
