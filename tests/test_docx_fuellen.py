@@ -74,6 +74,14 @@ def test_kaputtes_dokument_xml_ist_value_error():
         fuelle(d, {})
 
 
+def test_falsches_wurzelelement_ist_value_error():
+    d = docx(f'<w:body xmlns:w="{W}"/>'.encode())
+    with pytest.raises(ValueError):
+        platzhalter(d)
+    with pytest.raises(ValueError):
+        fuelle(d, {})
+
+
 def test_nicht_bytes_ist_value_error():
     for roh in (None, "text", bytearray(b"zip")):
         with pytest.raises(ValueError):

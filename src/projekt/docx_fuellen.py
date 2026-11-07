@@ -60,6 +60,8 @@ def _parse_dokument(roh: bytes) -> tuple[ET.Element, dict[str, str]]:
         wurzel = ET.fromstring(roh)
     except (ET.ParseError, ValueError) as fehler:
         raise ValueError("docx enthaelt ungueltiges XML in word/document.xml") from fehler
+    if wurzel.tag != f"{{{_W}}}document":
+        raise ValueError("docx enthaelt kein gueltiges word/document.xml")
     return wurzel, namensraeume
 
 
