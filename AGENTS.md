@@ -46,6 +46,12 @@ das Projekt nur aus einer Aufgabe besteht.
 | `seiten.py` | `TABS`, `rahmen`, `formular_mietvertrag`, `formular_protokoll`, `formular_settings`, `ergebnis` | nur HTML, maskiert |
 | `webapp.py` | `antwort(methode, pfad, kopf, koerper, kontext)` | ohne Socket |
 | `webserver.py` | `starte`, `main` | nur 127.0.0.1 |
+| `pfade.py` | `standard_lokal`, `erkenne_drive`, `drive_ordner`, `lokaler_ordner`, `einstellungen_aus_ordnern`, `lege_ordner_an` | GUI v3: zwei Ordner, Rest abgeleitet |
+| `auswahl.py` | `AUSWAHL_FELDER`, `auswahl_pfad`, `lade_auswahl`, `speichere_auswahl` | letzte Auswahl, atomar |
+| `objekttabelle.py` | `SPALTEN`, `neue_id`, `zeilen_aus_formular`, `objekte_aus_zeilen` | id automatisch, deutsche Fehler |
+| `vorauswahl.py` | `vorauswahl`, `merke` | Standardwerte der Formulare |
+| `seiten_einfach.py` | `TABS_EINFACH`, `rahmen_einfach`, `formular_ordner`, `formular_objekttabelle`, `formular_vertrag`, `formular_uebergabe` | nur HTML, maskiert |
+| `webapp_einfach.py` | `antwort(methode, pfad, kopf, koerper, kontext)` | ohne Socket; Nachfolger von `webapp.py` |
 
 ## Arbeitsablauf
 
