@@ -19,9 +19,7 @@ from datetime import UTC, datetime, timedelta
 KANDIDAT = "agent-kandidat"
 UEBERGEBEN = "agent-uebergeben"
 AGENT = "agent"
-MAX_LAEUFE_24H = (
-    30  # temporaer verdoppelt (Betreiber 08.11.), passend zu 80 AIC
-)
+MAX_LAEUFE_24H = 30  # temporaer verdoppelt (Betreiber 08.11.), passend zu 80 AIC
 MAX_PARALLEL = 5  # ausserhalb der Spitzenzeit und fuer Issues mit Label `dringend`
 MAX_PARALLEL_SPITZE = 2
 DRINGEND = "dringend"
