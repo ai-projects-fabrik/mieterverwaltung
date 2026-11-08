@@ -183,7 +183,7 @@ def test_settings_seite():
     assert "table" in seite.tags
     assert seite.felder["objekte_datei"] == "C:/M/objekte.json"
     assert seite.felder["ausgabe_lokal"] == "C:/M/<aus>"
-    for name in ("vorlagen_lokal", "vorlagen_drive", "ausgabe_drive", "pdf_eingang", "pdf_ausgabe"):
+    for name in ("vorlagen_lokal", "vorlagen_drive", "ausgabe_drive", "drive_wurzel"):
         assert seite.felder[name] == ""
     for name in ("neu_id", "neu_bezeichnung", "neu_miete_netto", "neu_nebenkosten", "neu_kaution"):
         assert name in seite.felder

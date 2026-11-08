@@ -10,6 +10,7 @@ if importlib.util.find_spec("projekt.einstellungen") is None:
     pytest.skip("Modul noch nicht umgesetzt", allow_module_level=True)
 
 from projekt.einstellungen import (  # noqa: E402
+    DRIVE_STANDARD,
     EINSTELLUNGEN_FELDER,
     einstellungen_pfad,
     lade_einstellungen,
@@ -25,8 +26,7 @@ VOLL = {
     "vorlagen_drive": "G:/Mein Drive/Vorlagen",
     "ausgabe_lokal": "C:/Mieter/ausgabe",
     "ausgabe_drive": "G:/Mein Drive/Ausgabe",
-    "pdf_eingang": "G:/Mein Drive/zu-pdf",
-    "pdf_ausgabe": "G:/Mein Drive/pdf-fertig",
+    "drive_wurzel": "G:/Mein Drive",
 }
 
 
@@ -37,8 +37,7 @@ def test_felder_und_normalisierung():
         "vorlagen_drive",
         "ausgabe_lokal",
         "ausgabe_drive",
-        "pdf_eingang",
-        "pdf_ausgabe",
+        "drive_wurzel",
     )
     assert normalisiere_einstellungen(VOLL) == VOLL
     assert normalisiere_einstellungen({"ausgabe_lokal": "  C:/x  "}) == {"ausgabe_lokal": "C:/x"}
@@ -116,10 +115,16 @@ def test_ordner_fehler():
         ordner(VOLL, "vorlagen", "cloud")
 
 
-def test_pdf_ordner():
-    assert pdf_ordner(VOLL, "eingang") == Path("G:/Mein Drive/zu-pdf")
-    assert pdf_ordner(VOLL, "ausgabe") == Path("G:/Mein Drive/pdf-fertig")
-    with pytest.raises(ValueError, match="pdf_eingang"):
-        pdf_ordner({"pdf_ausgabe": "x"}, "eingang")
+def test_pdf_ordner_unter_der_drive_wurzel():
+    assert DRIVE_STANDARD == "G:\\My Drive"
+    wurzel = Path(VOLL["drive_wurzel"])
+    assert pdf_ordner(VOLL, "eingang") == wurzel / "MV-zu-pdf"
+    assert pdf_ordner(VOLL, "ausgabe") == wurzel / "MV-pdf"
+    assert pdf_ordner(VOLL, "erledigt") == wurzel / "MV-erledigt"
+
+
+def test_pdf_ordner_standard_und_fehler():
+    assert pdf_ordner({}, "eingang") == Path(DRIVE_STANDARD) / "MV-zu-pdf"
+    assert pdf_ordner({"objekte_datei": "x"}, "ausgabe") == Path(DRIVE_STANDARD) / "MV-pdf"
     with pytest.raises(ValueError, match="art"):
         pdf_ordner(VOLL, "sonstiges")

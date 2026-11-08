@@ -24,7 +24,8 @@ PROTOKOLL = [
     "Strom {{zaehler_strom}}, Wasser {{zaehler_wasser}}, Schluessel {{schluessel_anzahl}}",
     "Bemerkungen: {{bemerkungen}}",
 ]
-ORDNER = ("vl", "vd", "al", "ad", "pe", "pa")
+ORDNER = ("vl", "vd", "al", "ad")
+HINWEIS = "PDF wird in Google Drive erzeugt und erscheint in wenigen Minuten in MV-pdf."
 
 
 def docx_bytes(absaetze):
@@ -50,6 +51,12 @@ def kontext(tmp_path):
     ordner = {n: tmp_path / n for n in ORDNER}
     for pfad in ordner.values():
         pfad.mkdir()
+    drive = tmp_path / "drive"
+    ordner["pe"], ordner["pa"], ordner["er"] = (
+        drive / n for n in ("MV-zu-pdf", "MV-pdf", "MV-erledigt")
+    )
+    for pfad in (drive, ordner["pe"], ordner["pa"], ordner["er"]):
+        pfad.mkdir()
     (ordner["vl"] / "vertrag.docx").write_bytes(docx_bytes(VERTRAG))
     (ordner["vd"] / "drive-vertrag.docx").write_bytes(docx_bytes(VERTRAG))
     (ordner["vl"] / "uebergabe.docx").write_bytes(docx_bytes(PROTOKOLL))
@@ -70,8 +77,7 @@ def kontext(tmp_path):
             "vorlagen_drive": str(ordner["vd"]),
             "ausgabe_lokal": str(ordner["al"]),
             "ausgabe_drive": str(ordner["ad"]),
-            "pdf_eingang": str(ordner["pe"]),
-            "pdf_ausgabe": str(ordner["pa"]),
+            "drive_wurzel": str(drive),
         },
         "ordner": ordner,
     }
@@ -94,7 +100,9 @@ def namen(kontext, ordner):
 
 
 def leer(kontext):
-    return all(not namen(kontext, n) for n in ("al", "ad", "pe", "pa"))
+    return all(
+        not namen(kontext, n) for n in ("al", "ad", "pa", "er") if kontext["ordner"][n].is_dir()
+    ) and (not kontext["ordner"]["pe"].is_dir() or not namen(kontext, "pe"))
 
 
 def test_formate_und_slug():
@@ -145,9 +153,7 @@ def test_pdf_geht_ueber_den_google_ordner_ohne_konverter(kontext):
     assert ergebnis["pdf_auftrag"] == "vertrag-bert-beispiel.docx"
     assert namen(kontext, "pe") == ["vertrag-bert-beispiel.docx"]
     assert namen(kontext, "al") == namen(kontext, "ad") == namen(kontext, "pa") == []
-    assert "PDF wird in Google Drive erzeugt" in ergebnis["hinweis"]
-    assert str(kontext["ordner"]["pa"]) in ergebnis["hinweis"]
-    assert "nach wenigen Minuten" in ergebnis["hinweis"]
+    assert ergebnis["hinweis"] == HINWEIS
     inhalt = absaetze(kontext["ordner"]["pe"] / "vertrag-bert-beispiel.docx")
     assert inhalt[1] == "Mieter: Bert Beispiel, Beginn 01.01.2026"
 
@@ -159,7 +165,7 @@ def test_docx_und_pdf_schreibt_beides(kontext):
     assert ergebnis["pdf_auftrag"] == "vertrag-bert-beispiel.docx"
     assert namen(kontext, "ad") == ["vertrag-bert-beispiel.docx"]
     assert namen(kontext, "pe") == ["vertrag-bert-beispiel.docx"]
-    assert "Google Drive" in ergebnis["hinweis"]
+    assert ergebnis["hinweis"] == HINWEIS
     assert namen(kontext, "al") == []
 
 
@@ -193,17 +199,17 @@ def test_fehler_nennen_das_feld_und_schreiben_nichts(kontext, aenderung, nennt):
     assert leer(kontext)
 
 
-def test_fehlende_einstellungen(kontext):
+def test_fehlende_einstellungen_und_fehlender_pdf_ordner(kontext):
     einst = kontext["einstellungen"]
     ohne = {**kontext, "einstellungen": {"objekte_datei": einst["objekte_datei"]}}
     with pytest.raises(ValueError, match="vorlagen_lokal"):
         erstelle_vertrag(basis(), ohne)
-    ohne_pdf = {k: v for k, v in einst.items() if k != "pdf_eingang"}
+    kontext["ordner"]["pe"].rmdir()
     for fmt in ("pdf", "docx+pdf"):
-        with pytest.raises(ValueError, match="pdf_eingang"):
-            erstelle_vertrag({**basis(), "format": fmt}, {**kontext, "einstellungen": ohne_pdf})
+        with pytest.raises(ValueError, match="MV-zu-pdf"):
+            erstelle_vertrag({**basis(), "format": fmt}, kontext)
     assert leer(kontext)
-    assert erstelle_vertrag(basis(), {**kontext, "einstellungen": ohne_pdf})["dateien"]
+    assert erstelle_vertrag(basis(), kontext)["dateien"] == ["vertrag-bert-beispiel.docx"]
 
 
 def test_ohne_objekt_genuegen_formularfelder(kontext):
@@ -259,7 +265,7 @@ def test_protokoll_pdf_und_fehler(kontext):
     assert ergebnis["dateien"] == []
     assert ergebnis["pdf_auftrag"] == "uebergabeprotokoll-anna-muster.docx"
     assert namen(kontext, "pe") == ["uebergabeprotokoll-anna-muster.docx"]
-    assert "Google Drive" in ergebnis["hinweis"]
+    assert ergebnis["hinweis"] == HINWEIS
     for aenderung, nennt in [
         ({"art": "Besichtigung"}, "art"),
         ({"zaehler_strom": "-1"}, "zaehler_strom"),

@@ -44,8 +44,10 @@ def docx_bytes(absaetze):
 
 @pytest.fixture
 def kontext(tmp_path):
-    for name in ("vl", "vd", "al", "ad", "pe", "pa"):
+    for name in ("vl", "vd", "al", "ad"):
         (tmp_path / name).mkdir()
+    for name in ("MV-zu-pdf", "MV-pdf", "MV-erledigt"):
+        (tmp_path / "drive" / name).mkdir(parents=True)
     (tmp_path / "vl" / "vertrag.docx").write_bytes(docx_bytes(VERTRAG))
     (tmp_path / "vd" / "drive.docx").write_bytes(docx_bytes(VERTRAG))
     (tmp_path / "objekte.json").write_text(json.dumps([OBJEKT]), encoding="utf-8")
@@ -55,8 +57,7 @@ def kontext(tmp_path):
         "vorlagen_drive": str(tmp_path / "vd"),
         "ausgabe_lokal": str(tmp_path / "al"),
         "ausgabe_drive": str(tmp_path / "ad"),
-        "pdf_eingang": str(tmp_path / "pe"),
-        "pdf_ausgabe": str(tmp_path / "pa"),
+        "drive_wurzel": str(tmp_path / "drive"),
     }
     datei = tmp_path / "einstellungen.json"
     datei.write_text(json.dumps(einstellungen), encoding="utf-8")
@@ -74,6 +75,10 @@ def seite(ergebnis):
 def ausgabe(kontext, ort="al"):
     ordner = kontext["einstellungen_datei"].parent / ort
     return sorted(p.name for p in ordner.iterdir())
+
+
+def pdf_eingang(kontext):
+    return ausgabe(kontext, "drive/MV-zu-pdf")
 
 
 def vertrag_form(**extra):
@@ -152,19 +157,18 @@ def test_pdf_geht_ueber_den_google_ordner_mit_hinweis(kontext):
     text = html.unescape(body.decode("utf-8"))
     assert status == 200
     assert ausgabe(kontext) == []
-    assert ausgabe(kontext, "pe") == ["vertrag-bert-beispiel.docx"]
-    assert "PDF wird in Google Drive erzeugt" in text
-    assert str(kontext["einstellungen_datei"].parent / "pa") in text
+    assert pdf_eingang(kontext) == ["vertrag-bert-beispiel.docx"]
+    assert "PDF wird in Google Drive erzeugt und erscheint in wenigen Minuten in MV-pdf." in text
     status, _, body = post(kontext, "/mietvertrag", vertrag_form(format="docx+pdf"))
     assert status == 200
     assert ausgabe(kontext) == ["vertrag-bert-beispiel.docx"]
-    assert ausgabe(kontext, "pe") == ["vertrag-bert-beispiel-2.docx", "vertrag-bert-beispiel.docx"]
-    einst = json.loads(kontext["einstellungen_datei"].read_text(encoding="utf-8"))
-    del einst["pdf_eingang"]
-    kontext["einstellungen_datei"].write_text(json.dumps(einst), encoding="utf-8")
+    assert pdf_eingang(kontext) == ["vertrag-bert-beispiel-2.docx", "vertrag-bert-beispiel.docx"]
+    (kontext["einstellungen_datei"].parent / "drive" / "MV-zu-pdf").rename(
+        kontext["einstellungen_datei"].parent / "drive" / "weg"
+    )
     status, _, body = post(kontext, "/mietvertrag", vertrag_form(format="pdf"))
     assert status == 400
-    assert "pdf_eingang" in html.unescape(body.decode("utf-8"))
+    assert "MV-zu-pdf" in html.unescape(body.decode("utf-8"))
 
 
 def test_nicht_konfiguriert_verweist_auf_settings(tmp_path):
