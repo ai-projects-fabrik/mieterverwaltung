@@ -1,0 +1,53 @@
+name: Auto-Merge
+
+# Betreiber-Anweisung LS-20261108-042 (Variante A): offene PRs, die nichts an Workflows, Akzeptanz-/Gate-Kriterien,
+# Rechten/Hooks/Settings oder Kostenbremsen aendern, bekommen Auto-Merge (squash). Gemergt wird erst, wenn alle
+# Pflichtchecks des Rulesets (test, agent-gate) gruen sind. Andere PRs bekommen das Label needs-operator.
+# pull_request_target: laeuft immer in der Fassung des Standard-Branches, nie aus dem PR; es gibt keinen Checkout
+# von PR-Code, der PR wird nur ueber die API gelesen. Entwuerfe und Fork-PRs bleiben aussen vor.
+# Revert: docs/auto-merge.md (Workflow loeschen oder in den Repo-Einstellungen "Allow auto-merge" ausschalten).
+on:
+  pull_request_target:
+    types: [opened, reopened, synchronize, ready_for_review]
+
+permissions: {}
+
+concurrency:
+  group: auto-merge-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  auto-merge:
+    if: ${{ !github.event.pull_request.draft && github.event.pull_request.head.repo.full_name == github.repository }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: read
+    steps:
+      - name: App-Token fuer Label und Auto-Merge (kurzlebig, nur dieses Repo)
+        id: merge-token
+        if: ${{ vars.AGENT_APP_ID != '' }}
+        continue-on-error: true
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        with:
+          client-id: ${{ vars.AGENT_APP_ID }}
+          private-key: ${{ secrets.AGENT_APP_KEY }}
+          owner: ${{ github.repository_owner }}
+          repositories: ${{ github.event.repository.name }}
+          github-api-url: ${{ github.api_url }}
+          permission-contents: write
+          permission-pull-requests: write
+          permission-issues: write
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          persist-credentials: false
+      - name: Pfade und Kostenbremsen pruefen, Auto-Merge setzen
+        env:
+          GH_TOKEN: ${{ github.token }}
+          MERGE_TOKEN: ${{ steps.merge-token.outputs.token }}
+          REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: python3 .github/betrieb/auto_merge.py
