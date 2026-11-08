@@ -20,7 +20,7 @@ KANDIDAT = "agent-kandidat"
 UEBERGEBEN = "agent-uebergeben"
 AGENT = "agent"
 MAX_LAEUFE_24H = (
-    15  # Vorlage: passend zum Tagesbudget von 20 AIC (README); je Projekt bewusst anpassen
+        30  # temporaer verdoppelt (Betreiber 08.11.), passend zu 80 AIC
 )
 MAX_PARALLEL = 5  # ausserhalb der Spitzenzeit und fuer Issues mit Label `dringend`
 MAX_PARALLEL_SPITZE = 2
