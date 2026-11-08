@@ -82,8 +82,8 @@ def test_akzeptanztest_pflicht_spec_first():
 
 def test_limits_laeufe_und_offene_prs():
     assert ad.MAX_LAEUFE_24H == 30 and ad.MAX_PARALLEL == 5 and ad.MAX_PARALLEL_SPITZE == 2
-    assert pruefe(laeufe=14)[0]
-    assert not pruefe(laeufe=15)[0]
+    assert pruefe(laeufe=29)[0]
+    assert not pruefe(laeufe=30)[0]
     assert pruefe(prs=4)[0]
     assert not pruefe(prs=5)[0]
 
