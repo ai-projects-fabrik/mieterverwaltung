@@ -13,8 +13,9 @@ Mietvertrag per Anfrage auf den aktuellen Mieter anpassen (Vorlage .docx, Platzh
 
 ## Fachregeln
 
-- Nur Standardbibliothek; keine Netzwerkzugriffe, keine echten Personendaten, in Tests nur erfundene Daten.
-- Der Vertragstext bleibt fest; nur die Felder aus `projekt.felder` sind veraenderlich (Platzhalter `{{feldname}}` in der .docx-Vorlage).
+- Nur Standardbibliothek; keine Netzwerkzugriffe ausser dem lokalen Webserver auf 127.0.0.1 (nur `gui.py` und `webserver.py`); kein Subprozess, kein Google-Code, keine echten Personendaten, in Tests nur erfundene Daten.
+- Der Vertragstext bleibt fest; nur die Felder aus `projekt.felder` sind veraenderlich (Platzhalter `{{feldname}}` in der .docx-Vorlage). Das Uebergabeprotokoll hat eigene Felder in `projekt.protokoll`.
+- Stammdaten, Einstellungen, Vorlagen und Ausgaben liegen lokal ausserhalb des Repos; Google Drive nur als synchronisierter Ordner (Google Drive fuer Desktop). PDFs entstehen durch ein Google-Apps-Script im Drive des Betreibers (siehe `docs/apps-script-pdf.md`), nicht im Programm.
 - Betraege in CHF mit Apostroph-Tausendern und zwei Nachkommastellen, Daten als `DD.MM.YYYY`.
 - Fehler in den Modulen immer als `ValueError` mit deutschem Klartext, der den Feldnamen nennt.
 - Das Programm sendet nie E-Mails und schreibt nie ueber eine vorhandene Ausgabedatei; ein Mensch prueft jeden neuen Vertrag.
@@ -36,6 +37,15 @@ das Projekt nur aus einer Aufgabe besteht.
 | `anfrage.py` | `aenderungen_aus_text(text: str) -> dict[str, str]` | Zeilen `Feld: Wert`; `ValueError` mit Feldnamen |
 | `bericht.py` | `bericht(alt: dict, neu: dict) -> str` | `keine Aenderungen` ohne Unterschied; `ValueError` bei fremden Schluesseln |
 | `cli.py` | `main(argv: list[str] \| None = None) -> int` | `--vorlage`, `--daten`, `--anfrage`, `--ausgabe`, `--selbsttest`; Rueckgabe 0, 1 oder 2 |
+| `gui.py` | `antwort`, `starte`, `main` | GUI v1, nur 127.0.0.1 |
+| `objekte.py` | `normalisiere_objekt`, `objekt_als_felder`, `setze_objekt`, `entferne_objekt`, `lade_objekte`, `speichere_objekte` | `ValueError` mit Feldname |
+| `einstellungen.py` | `EINSTELLUNGEN_FELDER`, `DRIVE_STANDARD`, `normalisiere_einstellungen`, `lade_einstellungen`, `speichere_einstellungen`, `einstellungen_pfad`, `ordner`, `pdf_ordner` | atomar schreiben |
+| `ablage.py` | `liste_vorlagen`, `lese_vorlage`, `schreibe_ausgabe` | nie ueberschreiben |
+| `protokoll.py` | `PROTOKOLL_FELDER`, `normalisiere_protokoll` | `ValueError` mit Feldname |
+| `auftraege.py` | `FORMATE`, `slug`, `erstelle_vertrag`, `erstelle_protokoll` | Logik ohne HTTP; PDF nur als Auftrag im Drive-Ordner |
+| `seiten.py` | `TABS`, `rahmen`, `formular_mietvertrag`, `formular_protokoll`, `formular_settings`, `ergebnis` | nur HTML, maskiert |
+| `webapp.py` | `antwort(methode, pfad, kopf, koerper, kontext)` | ohne Socket |
+| `webserver.py` | `starte`, `main` | nur 127.0.0.1 |
 
 ## Arbeitsablauf
 
