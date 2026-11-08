@@ -17,7 +17,7 @@ imports:
 # Reale Laeufe: Median ca. 1.2, Maximum 3.1 AIC. Erhoehen nur bewusst je Projekt (Neukompilieren noetig).
 timeout-minutes: 30
 max-ai-credits: 12
-max-daily-ai-credits: 80
+max-daily-ai-credits: 150
 network:
   allowed:
     - defaults
