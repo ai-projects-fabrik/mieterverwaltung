@@ -1,14 +1,16 @@
 # ruff: noqa: E501
 """Zeitplan-Job: uebergibt Issues nach Tages-/Laufgrenze automatisch neu an den Agenten.
 
-Drei Faelle, alle nur bei AGENT_AUTO=on und ohne neue Rechte (Issues-Label per App-Token):
+Vier Faelle, alle nur bei AGENT_AUTO=on und ohne neue Rechte (Issues-Label per App-Token):
 1. Tagesbudget: Ein Lauf von `issue-agent` brach am Guardrail `max-daily-ai-credits` ab (gh-aw schreibt dazu einen Kommentar
    "Daily Workflow AIC Guardrail Exceeded" in das offene `[aw]`-Issue). Faellt dieser Abbruch kurz nach dem letzten Setzen des
    Labels `agent` auf ein offenes Issue ohne offenen PR, wird das Label neu gesetzt. Der Abbruch kostet nichts; hoechstens
    MAX_VERSUCHE Wiederholungen je Issue, mindestens MIN_ABSTAND dazwischen (Marker im Issue). Laeuft gerade ein Agentenlauf, passiert nichts.
 2. Retry: Das Gate hat einen PR wegen "Datei nicht im Auftrag" verworfen und im Issue den Marker gate-retry gesetzt (einmalig,
    dort begrenzt); das Label `agent` wird neu gesetzt (das Gate-Token hat kein Issues-Recht).
-3. Laufgrenze: Issues mit Label `agent-kandidat`, die noch nicht uebergeben sind (z. B. wegen MAX_LAEUFE_24H), werden ueber
+3. Haengende Agenten-PRs (agent-gate "expected", PR BLOCKED trotz gruener Pflichtchecks): einmal je Commit schliessen und wieder
+   oeffnen; das startet CI und Gate neu, der Check-Run landet dann in einer frischen Suite. Mehr darf dieser Job hier nicht (kein Push).
+4. Laufgrenze: Issues mit Label `agent-kandidat`, die noch nicht uebergeben sind (z. B. wegen MAX_LAEUFE_24H), werden ueber
    agent_dispatch.py erneut geprueft; alle Dispatch-Grenzen gelten unveraendert (NEU_STILL=1 unterdrueckt den Ablehnungskommentar).
 Es wird nur Issue-Metadaten gelesen, nie Issue-Text ausgefuehrt.
 """
@@ -34,6 +36,8 @@ KORRELATION = timedelta(
 MAX_KANDIDATEN = 3
 ABBRUCH_TEXT = "Daily Workflow AIC Guardrail Exceeded"
 FEHLER_TITEL = re.compile(r"^\[aw\] .*(Issue umsetzen|issue-agent)", re.I)
+HAENGT_NACH = timedelta(minutes=20)
+PFLICHT = ("test", "agent-gate")
 CLOSES = re.compile(r"\b(?:closes|fixes|resolves)\s+#(\d+)", re.I)
 
 
@@ -114,6 +118,54 @@ def laeuft_gerade(laeufe):
     return any(r.get("status") in ("queued", "in_progress", "waiting", "pending") for r in laeufe)
 
 
+def haengt(pr, checks, kommentare, jetzt):
+    """True, wenn ein offener Agenten-PR trotz gruener Pflichtchecks BLOCKED ist und noch nicht angestossen wurde."""
+    if pr.get("state") != "open" or pr.get("draft") or (pr.get("user") or {}).get("type") != "Bot":
+        return False
+    if pr.get("mergeable_state") != "blocked" or jetzt - zeit(pr["updated_at"]) < HAENGT_NACH:
+        return False
+    gruen = {c["name"] for c in checks if c.get("conclusion") == "success"}
+    if not set(PFLICHT) <= gruen:
+        return False
+    marke = f"<!-- neustoss:{pr['head']['sha']} -->"
+    return not any(marke in (c.get("body") or "") for c in kommentare)
+
+
+def stosse_haengende_an(repo, token, jetzt):
+    """Schliesst und oeffnet haengende Agenten-PRs einmal je Commit wieder (Marker-Kommentar zuerst)."""
+    for kurz in seiten(f"repos/{repo}/pulls?state=open&per_page=50"):
+        nr = kurz["number"]
+        pr = json.loads(gh("api", f"repos/{repo}/pulls/{nr}"))
+        checks = [
+            c
+            for teil in json.loads(
+                gh(
+                    "api",
+                    "--paginate",
+                    "--slurp",
+                    f"repos/{repo}/commits/{pr['head']['sha']}/check-runs",
+                )
+            )
+            for c in teil["check_runs"]
+        ]
+        kommentare = seiten(f"repos/{repo}/issues/{nr}/comments?per_page=100")
+        if not haengt(pr, checks, kommentare, jetzt):
+            continue
+        print(f"PR {nr}: haengt (BLOCKED, Pflichtchecks gruen): schliessen und wieder oeffnen")
+        gh(
+            "pr",
+            "comment",
+            str(nr),
+            "--repo",
+            repo,
+            "--body",
+            f"<!-- neustoss:{pr['head']['sha']} -->\nProtokoll: PR haengt trotz gruener Checks (agent-gate nicht gewertet); wird einmal geschlossen und wieder geoeffnet.",
+        )
+        gh("pr", "close", str(nr), "--repo", repo, token=token)
+        gh("pr", "reopen", str(nr), "--repo", repo, token=token)
+        return  # hoechstens ein PR je Lauf
+
+
 def main():
     repo = os.environ["GH_REPO"]
     if os.environ.get("AGENT_AUTO") != "on":
@@ -139,6 +191,7 @@ def main():
         fehler, lambda i: seiten(f"repos/{repo}/issues/{i['number']}/comments?per_page=100")
     )
     code = 0
+    stosse_haengende_an(repo, token, jetzt)
     prs = seiten(f"repos/{repo}/pulls?state=open&per_page=100")
     offene = pr_ziele(prs)
     for issue in seiten(f"repos/{repo}/issues?state=open&labels={AGENT}&per_page=100"):

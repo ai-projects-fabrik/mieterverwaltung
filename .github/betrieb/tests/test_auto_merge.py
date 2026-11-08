@@ -85,3 +85,21 @@ def test_gruende_sind_eindeutig_und_sortiert():
     assert not ok
     assert gruende == sorted(set(gruende))
     assert len(gruende) == 1
+
+
+def test_workflow_hat_kein_if_am_job():
+    """Ein uebersprungener Job ergibt eine Suite 'skipped': agent-gate wird dort nicht gewertet."""
+    text = (Path(__file__).resolve().parents[2] / "workflows" / "auto-merge.yml").read_text(
+        encoding="utf-8"
+    )
+    zeilen = text.splitlines()
+    start = zeilen.index("jobs:")
+    jobs = []
+    for zeile in zeilen[start + 1 :]:
+        if zeile and not zeile.startswith(" ") and not zeile.startswith("#"):
+            break
+        jobs.append(zeile)
+    # Job-Schluessel stehen mit 4 Leerzeichen Einzug direkt unter dem Job-Namen (2 Leerzeichen).
+    job_schluessel = [z.strip() for z in jobs if z.startswith("    ") and not z.startswith("     ")]
+    assert jobs, "kein jobs-Block gefunden"
+    assert not any(z.startswith("if:") for z in job_schluessel)

@@ -359,6 +359,56 @@ jobs:
                      "-f", f"head_sha={sha}", *felder)
 
 
+          LEER_MARKER = "[gate] Leerer Commit"  # Marker der einzigen erlaubten Rueckfall-Aktion je PR
+
+
+          def suite_zaehlt(sha):
+              """False, wenn der Check-Run agent-gate in einer uebersprungenen Check-Suite liegt (GitHub wertet ihn dann nicht fuer die
+              Pflichtpruefung; der PR bleibt BLOCKED mit "Required status check is expected"). True, wenn ok oder nicht lesbar."""
+              try:
+                  laeufe = [c for teil in json_folge(gh("api", "--paginate",
+                                                        f"repos/{REPO}/commits/{sha}/check-runs?check_name={CHECK_NAME}",
+                                                        fatal=False))
+                            for c in teil["check_runs"]
+                            if c["name"] == CHECK_NAME and c["app"]["id"] == PFLICHT_APP_ID]
+                  suite = json.loads(gh("api", f"repos/{REPO}/check-suites/{laeufe[-1]['check_suite']['id']}", fatal=False))
+              except (ValueError, TypeError, KeyError, IndexError, AttributeError):
+                  return True
+              return suite.get("conclusion") != "skipped"
+
+
+          def suite_reparieren(pr, pr_nr, head_sha, standard, text):
+              """agent-gate zaehlt nicht (Suite skipped). Stufe 1: neue offene Suite anlegen und neu melden. Stufe 2 (einmal je PR):
+              leerer Commit, damit CI und Gate auf einem neuen Stand mit frischen Suites laufen. Gibt True zurueck, wenn weiter gemergt werden darf."""
+              print(f"WARNUNG: Check-Run {CHECK_NAME} liegt in einer uebersprungenen Check-Suite und wird von GitHub nicht gewertet.")
+              versuche("api", "-X", "POST", f"repos/{REPO}/check-suites", "-f", f"head_sha={head_sha}")
+              melde(head_sha, "success", text)
+              if suite_zaehlt(head_sha):
+                  print("Protokoll: agent-gate in neuer offener Suite neu gemeldet.")
+                  return True
+              ref = (pr["head"].get("ref") or "") if (pr["head"].get("repo") or {}).get("full_name") == REPO else ""
+              rc, out, _ = versuche("api", f"repos/{REPO}/git/commits/{head_sha}")
+              try:
+                  info = json.loads(out)
+              except ValueError:
+                  info = {}
+              if not MERGE_TOKEN or not ref or ref == standard or rc != 0 or LEER_MARKER in info.get("message", ""):
+                  print("STOPP: kein weiterer Rueckfall (leerer Commit schon versucht, Token/Branch fehlt): Betreiber pruefen.")
+                  STAND["fehler"] += 1
+                  return False
+              rc, out, _ = versuche("api", "-X", "POST", f"repos/{REPO}/git/commits", "-f", f"message={LEER_MARKER} (agent-gate wurde nicht gewertet)",
+                                    "-f", f"tree={info['tree']['sha']}", "-f", f"parents[]={head_sha}")
+              try:
+                  neu = json.loads(out)["sha"]
+              except (ValueError, KeyError, TypeError):
+                  STAND["fehler"] += 1
+                  return False
+              rc, _, _ = versuche("api", "-X", "PATCH", f"repos/{REPO}/git/refs/heads/{quote(ref, safe='/')}", "-f", f"sha={neu}")
+              print(f"Protokoll: leerer Commit {neu[:8]} auf {s(ref)} (Rueckfall, einmal je PR)." if rc == 0 else "Leerer Commit NICHT gesetzt.")
+              STAND["fehler"] += rc != 0
+              return False
+
+
           def versuche(*args):
               """gh-Aufruf ohne Abbruch: (Rueckgabecode, stdout, stderr)."""
               r = subprocess.run([*GH, *args], capture_output=True, text=True)
@@ -611,6 +661,8 @@ jobs:
               ERGEBNIS["text"] = text
               melde(head_sha, "success", text)
               ERGEBNIS["melden"] = False
+              if not suite_zaehlt(head_sha) and not suite_reparieren(pr, pr_nr, head_sha, standard, text):
+                  return 1 if STAND["fehler"] else 0
               if not repo.get("allow_auto_merge"):
                   # Sonst wuerde `gh pr merge --auto` einen bereits gruenen PR sofort direkt mergen.
                   print("Auto-Merge ist im Repo nicht erlaubt: keine Integration, Draft-Status unveraendert.")

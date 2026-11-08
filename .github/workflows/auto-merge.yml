@@ -5,6 +5,9 @@ name: Auto-Merge
 # Pflichtchecks des Rulesets (test, agent-gate) gruen sind. Andere PRs bekommen das Label needs-operator.
 # pull_request_target: laeuft immer in der Fassung des Standard-Branches, nie aus dem PR; es gibt keinen Checkout
 # von PR-Code, der PR wird nur ueber die API gelesen. Entwuerfe und Fork-PRs bleiben aussen vor.
+# WICHTIG: Kein `if` am Job. Ein uebersprungener Job ergibt eine Check-Suite mit conclusion skipped; landet der Check-Run agent-gate des
+# Gates (gleiche App, gleicher Commit) in dieser Suite, zaehlt GitHub ihn nicht als gemeldet (PR bleibt BLOCKED, "expected").
+# Deshalb entscheiden die Schritte, nicht der Job; ohne Auto-Merge-Anlass endet der Lauf als success.
 # Revert: docs/auto-merge.md (Workflow loeschen oder in den Repo-Einstellungen "Allow auto-merge" ausschalten).
 on:
   pull_request_target:
@@ -18,7 +21,6 @@ concurrency:
 
 jobs:
   auto-merge:
-    if: ${{ !github.event.pull_request.draft && github.event.pull_request.head.repo.full_name == github.repository }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
@@ -27,7 +29,7 @@ jobs:
     steps:
       - name: App-Token fuer Label und Auto-Merge (kurzlebig, nur dieses Repo)
         id: merge-token
-        if: ${{ vars.AGENT_APP_ID != '' }}
+        if: ${{ vars.AGENT_APP_ID != '' && !github.event.pull_request.draft && github.event.pull_request.head.repo.full_name == github.repository }}
         continue-on-error: true
         uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
         with:
@@ -40,10 +42,12 @@ jobs:
           permission-pull-requests: write
           permission-issues: write
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        if: ${{ !github.event.pull_request.draft && github.event.pull_request.head.repo.full_name == github.repository }}
         with:
           ref: ${{ github.event.repository.default_branch }}
           persist-credentials: false
       - name: Pfade und Kostenbremsen pruefen, Auto-Merge setzen
+        if: ${{ !github.event.pull_request.draft && github.event.pull_request.head.repo.full_name == github.repository }}
         env:
           GH_TOKEN: ${{ github.token }}
           MERGE_TOKEN: ${{ steps.merge-token.outputs.token }}

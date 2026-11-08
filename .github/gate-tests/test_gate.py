@@ -146,6 +146,7 @@ def lauf(
     ciruns=None,
     env_extra=None,
     events=None,
+    gate_suite=None,
 ):
     global ZAEHLER
     ZAEHLER += 1
@@ -210,6 +211,19 @@ def lauf(
         open(os.path.join(fx, "bekannt_head.txt"), "w", encoding="utf-8").write(bekannt[1])
     if commits_auftrag is not None:
         json.dump(commits_auftrag, open(os.path.join(fx, "commits_auftrag.json"), "w"))
+    if gate_suite is not None:  # (Suite-Ergebnis vorher, Suite-Ergebnis nach neuer Suite oder None)
+        json.dump(
+            {
+                "total_count": 1,
+                "check_runs": [
+                    {"id": 9, "name": "agent-gate", "app": {"id": 15368}, "check_suite": {"id": 77}}
+                ],
+            },
+            open(os.path.join(fx, "gate_run.json"), "w"),
+        )
+        json.dump({"conclusion": gate_suite[0]}, open(os.path.join(fx, "suite.json"), "w"))
+        if gate_suite[1] is not None:
+            json.dump({"conclusion": gate_suite[1]}, open(os.path.join(fx, "suite_nach.json"), "w"))
     if akz404:
         open(os.path.join(fx, "akzeptanz_404"), "w").write("1")
     if prraw is not None:
@@ -417,6 +431,43 @@ R(
         "pass",
         [RISIKO_SRC, datei("tests/test_a.py")],
         prd=pr(user={"login": "o", "type": "User"}),
+        writes=A,
+    )
+)
+R(
+    lauf(
+        "Suite: agent-gate in uebersprungener Suite -> neue Suite, dann normal weiter",
+        "pass",
+        gate_suite=("skipped", "success"),
+        writes=["suite-neu", *A],
+        stdout=["neuer offener Suite"],
+    )
+)
+R(
+    lauf(
+        "Suite: neue Suite hilft nicht -> einmal leerer Commit, kein Merge",
+        "pass",
+        gate_suite=("skipped", "skipped"),
+        writes=["suite-neu", "leer-commit", "leer-ref"],
+        prd=pr(head={"sha": SHA, "ref": "agent/x", "repo": {"full_name": "o/r"}}),
+        stdout=["leerer Commit"],
+    )
+)
+R(
+    lauf(
+        "Suite: leerer Commit schon versucht -> rot (Betreiber), kein zweiter",
+        "fail",
+        gate_suite=("skipped", "skipped"),
+        marker=("leer_marker",),
+        prd=pr(head={"sha": SHA, "ref": "agent/x", "repo": {"full_name": "o/r"}}),
+        writes=["suite-neu"],
+    )
+)
+R(
+    lauf(
+        "Suite: Suite ok -> keine Zusatzaktion",
+        "pass",
+        gate_suite=("success", None),
         writes=A,
     )
 )
