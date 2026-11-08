@@ -154,6 +154,7 @@ def test_einstellungen_pfad_standard_und_leere_umgebung(tmp_path):
 def test_einstellungen_pfad_nutzt_standard_home(monkeypatch, tmp_path):
     monkeypatch.setenv("MIETER_EINSTELLUNGEN", "")
     monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setenv("USERPROFILE", str(tmp_path))
     assert einstellungen_pfad() == tmp_path / ".mieterverwaltung" / "einstellungen.json"
 
 
