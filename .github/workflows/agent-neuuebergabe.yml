@@ -1,0 +1,53 @@
+name: Agent-Neuuebergabe
+
+# Zeitplan (stuendlich): uebergibt Issues nach Tages-/Laufgrenze automatisch neu (siehe .github/betrieb/neuuebergabe.py). Ohne AGENT_AUTO=on
+# passiert (und kostet) nichts; Abbrueche am Tagesbudget kosten keine AIC. Neue Rechte gibt es nicht: Issues-Label per kurzlebigem App-Token
+# (nur dieses Repo, Issues-Schreibrecht), Code nur vom Standard-Branch. Der Issue-Text wird nie ausgefuehrt.
+
+on:
+  schedule:
+    - cron: "17 * * * *"
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: agent-neuuebergabe
+  cancel-in-progress: false
+
+jobs:
+  neuuebergabe:
+    if: vars.AGENT_AUTO == 'on'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      actions: read
+      pull-requests: read
+      issues: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+      - name: App-Token (nur Issues)
+        id: app
+        if: ${{ vars.AGENT_APP_ID != '' }}
+        continue-on-error: true
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        with:
+          client-id: ${{ vars.AGENT_APP_ID }}
+          private-key: ${{ secrets.AGENT_APP_KEY }}
+          owner: ${{ github.repository_owner }}
+          repositories: ${{ github.event.repository.name }}
+          github-api-url: ${{ github.api_url }}
+          permission-issues: write
+      - name: Neu uebergeben
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          APP_TOKEN: ${{ steps.app.outputs.token }}
+          AGENT_AUTO: ${{ vars.AGENT_AUTO }}
+        run: python .github/betrieb/neuuebergabe.py

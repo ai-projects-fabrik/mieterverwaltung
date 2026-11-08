@@ -221,6 +221,8 @@ def main(argv):
         ),
     )
     print(f"Issue {nr}: {'UEBERGABE' if ok else 'keine Uebergabe'} ({grund})")
+    if not ok and os.environ.get("NEU_STILL") == "1":
+        return 0  # Zeitplan-Neupruefung (neuuebergabe.py): kein Ablehnungskommentar bei jedem Durchlauf
     if not ok:
         gh(
             "issue",

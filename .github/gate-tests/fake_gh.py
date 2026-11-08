@@ -75,6 +75,10 @@ if a[0] == "api":
         if hat("fail_graphql"):
             fehler("HTTP 403", 1)
         print(load("closing.json"))
+    elif re.search(r"/issues/[0-9]+/comments$", roh):
+        if hat("fail_comments"):
+            fehler("gh: Forbidden (HTTP 403)", 1)
+        print('[{"body": "<!-- gate-retry -->"}]' if hat("retry_marker") else "[]")
     elif re.search(r"/issues/[0-9]+$", path):
         print(load("issue.json"))
     elif roh.endswith("/reviews"):
@@ -238,10 +242,24 @@ elif a[:2] == ["pr", "merge"] and "--auto" in a:
         fehler("HTTP 403: Resource not accessible by integration", 1)
     log("auto " + a[a.index("--match-head-commit") + 1])
     log("tok merge-auto " + wer())
+elif a[:2] == ["label", "create"]:
+    log("label-create")
+elif a[:2] == ["issue", "edit"]:
+    log("issue-edit " + " ".join(x for x in a[a.index("--repo") + 2 :]))
+    log("tok issue-edit " + wer())
+elif a[:2] == ["issue", "comment"]:
+    if hat("fail_comment"):
+        fehler("HTTP 403: Resource not accessible by integration", 1)
+    log("issue-comment")
+elif a[:2] == ["pr", "close"]:
+    log("pr-close")
 elif a[:2] == ["workflow", "run"]:
     if hat("fail_dispatch"):
         fehler("HTTP 403: Resource not accessible by integration", 1)
-    log("ci-dispatch " + a[a.index("--ref") + 1])
+    log(
+        ("neu-dispatch " if a[2] == "agent-neuuebergabe.yml" else "ci-dispatch ")
+        + a[a.index("--ref") + 1]
+    )
     log("tok ci-dispatch " + wer())
 elif a[:2] == ["issue", "close"]:
     if hat("fail_issue"):

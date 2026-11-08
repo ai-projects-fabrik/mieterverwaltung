@@ -8,7 +8,9 @@ name: Agent-Gate
 # gruene main-CI. Das Gate laeuft nach jeder gruenen CI auf einem PR (workflow_run), fuehrt NIE Code oder Artefakte aus dem PR aus (kein Checkout, nur API) und glaubt dem Ereignis nicht:
 # Lauf, PR, Autor, HEAD und Pflicht-Check werden ueber die API geprueft. Es setzt je Commit den Check-Run "agent-gate" (Ruleset
 # main-schutz, Pflicht). Agenten-PRs mit Verstoss werden rot; Eigentuemer-PRs bleiben gruen mit Hinweis "Mensch merged".
-# Ready und Merge laufen mit einem kurzlebigen Token der GitHub App (nur contents + pull-requests: write). Ohne App-Token gibt es
+# Ausnahme: Agenten-PRs, deren EINZIGER Verstoss riskante Imports/Aufrufe in src/ sind, werden gruen mit Hinweis "Mensch merged" (Auto-Merge aus,
+# Label needs-operator); jeder andere Verstoss bleibt rot. Bei "Datei nicht im Auftrag" als einzigem Verstoss wird das Issue einmal automatisch
+# neu uebergeben (PR schliessen, Marker im Issue, der Job agent-neuuebergabe setzt das Label agent neu). Ready und Merge laufen mit einem kurzlebigen Token der GitHub App (nur contents + pull-requests: write). Ohne App-Token gibt es
 # keinen Merge (fail closed). Nach einem Merge: CI auf main starten, verknuepfte Issues schliessen, Agenten-Branch loeschen.
 
 on:
@@ -113,6 +115,10 @@ jobs:
           # den von Menschen gemergten Akzeptanztest tests/akzeptanz/test_<modul>.py.
           MODUL = re.compile(r"^src/(?:[^/]+/)+([A-Za-z0-9][A-Za-z0-9_]*)\.py$")
           # Vom Agenten deklarierte Abweichung vom Auftrag (Zeile "ABWEICHUNG: ..." im PR-Text).
+          RISIKO_PRAEFIX = "riskanter Aufruf/Import in "  # einziger Verstoss: gruen mit Hinweis, Mensch merged
+          FREMD_PRAEFIX = "Datei nicht im Auftrag"  # einziger Verstoss: ein automatischer Retry
+          RETRY_MARKER = "<!-- gate-retry -->"
+          LABEL_BETREIBER = "needs-operator"
           ABWEICHUNG = re.compile(r"^[\s>*_-]*ABWEICHUNG\b[\s*_]*:[\s*_]*(.*)$", re.I | re.M)
           KEINE_ABWEICHUNG = {"keine", "kein", "nein", "-", "none", "n/a", "entfaellt"}
 
@@ -308,7 +314,7 @@ jobs:
                           if test_py and TEST_SKIP.search(inhalt):
                               v.append(f"Test uebersprungen/xfail in {s(name)}: {s(inhalt.strip())}")
                           if bot and name.startswith("src/") and SRC_RISIKO.search(inhalt) and not URLLIB_PARSE_OK.match(inhalt):
-                              v.append(f"riskanter Aufruf/Import in {s(name)}: {s(inhalt.strip())}")
+                              v.append(f"{RISIKO_PRAEFIX}{s(name)}: {s(inhalt.strip())}")
                       if test_py and ASSERT.match(inhalt):
                           if zeile.startswith("-"):
                               entfernt += 1
@@ -577,7 +583,15 @@ jobs:
               verstoesse = bewerte_auto(pr, dateien, standard, bot, akzeptanz)
               if verstoesse:
                   text = "; ".join(verstoesse)
+                  if bot and all(x.startswith(RISIKO_PRAEFIX) for x in verstoesse):
+                      # Riskante Imports sind kein Regelbruch, aber nichts fuer den Auto-Merge: Mensch prueft und merged.
+                      return halt(pr_nr, head_sha, f"Mensch merged: riskante Imports/Aufrufe in src/ ({text})", bot,
+                                  auto_aus=True, gruen=True)
                   if bot:
+                      if all(x.startswith(FREMD_PRAEFIX) for x in verstoesse):
+                          hinweis = wiederhole_einmal(pr, pr_nr, standard)
+                          print(f"Retry: {s(hinweis)}")
+                          text += "; " + hinweis
                       print("Gate NICHT bestanden:")
                       for eintrag in verstoesse:
                           print(f"  - {eintrag}")
@@ -619,10 +633,48 @@ jobs:
               return 1 if STAND["fehler"] else 0
 
 
-          def halt(pr_nr, head_sha, text, bot, auto_aus):
-              """Keine automatische Integration: Agenten-PR rot (Kill-Switch/Stopp), Eigentuemer-PR gruen mit Hinweis."""
+          def wiederhole_einmal(pr, pr_nr, standard):
+              """Einziger Verstoss 'Datei nicht im Auftrag': PR schliessen und das Issue EINMAL neu uebergeben. Gibt den Hinweistext zurueck."""
+              nr, _ = auftrag(pr)
+              if nr is None:
+                  return "kein Retry (Issue unbekannt)"
+              rc, kommentare, _ = versuche("api", "--paginate", f"repos/{REPO}/issues/{nr}/comments")
+              if rc != 0 or RETRY_MARKER in kommentare:
+                  return "kein Retry (schon einmal wiederholt oder Kommentare nicht lesbar)"
+              rc, out, _ = versuche("api", f"repos/{REPO}/issues/{nr}")
+              try:
+                  issue = json.loads(out)
+              except ValueError:
+                  return "kein Retry (Issue nicht lesbar)"
+              if rc != 0 or issue.get("state") != "open" or issue.get("pull_request"):
+                  return "kein Retry (Issue nicht offen)"
+              # Marker zuerst: scheitert ein spaeterer Schritt, gibt es trotzdem nie eine zweite Wiederholung.
+              rc, _, _ = versuche("issue", "comment", str(nr), "--repo", REPO, "--body",
+                                  f"{RETRY_MARKER}\nAutomatische Wiederholung (einmalig): PR #{pr_nr} aenderte eine Datei ausserhalb "
+                                  "des Auftrags und wurde verworfen. Das Issue wird neu an den Agenten uebergeben (bezahlter Lauf).")
+              if rc != 0:
+                  return "kein Retry (Marker nicht gesetzt)"
+              versuche("pr", "close", pr_nr, "--repo", REPO, "--comment",
+                       f"Verworfen: Datei ausserhalb des Auftrags (Issue #{nr}); automatischer Retry.")
+              ref = (pr["head"].get("ref") or "") if (pr["head"].get("repo") or {}).get("full_name") == REPO else ""
+              if ref and ref != standard:
+                  versuche("api", "-X", "DELETE", f"repos/{REPO}/git/refs/heads/{quote(ref, safe='/')}")
+              # Das Label setzt der Zeitplan-Job agent-neuuebergabe (Issues-App-Token; das Gate-Token hat kein Issues-Recht).
+              rc, _, _ = versuche("workflow", "run", "agent-neuuebergabe.yml", "--repo", REPO, "--ref", standard)
+              return f"Retry fuer Issue #{nr} angefordert" if rc == 0 else f"Retry fuer Issue #{nr} angefordert (Neuuebergabe-Job laeuft stuendlich)"
+
+
+          def halt(pr_nr, head_sha, text, bot, auto_aus, gruen=False):
+              """Keine automatische Integration: Agenten-PR rot (Kill-Switch/Stopp), Eigentuemer-PR gruen mit Hinweis.
+
+              gruen=True: auch ein Agenten-PR wird gruen mit Hinweis (Auto-Merge aus, Label needs-operator), nie rot.
+              """
               print(f"STOPP: {s(text)}")
-              if bot:
+              if bot and gruen:
+                  gh("pr", "merge", pr_nr, "--repo", REPO, "--disable-auto", fatal=False)  # zuerst: sonst merged der gruene Check sofort
+                  versuche("label", "create", LABEL_BETREIBER, "--repo", REPO, "--force", "--color", "B60205")
+                  versuche("issue", "edit", pr_nr, "--repo", REPO, "--add-label", LABEL_BETREIBER)
+              elif bot:
                   ERGEBNIS["text"] = text
                   gh("pr", "merge", pr_nr, "--repo", REPO, "--disable-auto", fatal=False)
                   return 1
