@@ -342,15 +342,11 @@ jobs:
               """Setzt den Check-Run agent-gate fuer genau diesen Commit (fehlt er, ist der Merge blockiert)."""
               felder = ["-f", "status=completed", "-f", f"conclusion={conclusion}",
                         "-f", f"output[title]=Agent-Gate: {conclusion}", "-f", f"output[summary]={s(text)[:900]}"]
-              vorhanden = [c for teil in json_folge(gh("api", "--paginate",
-                                                       f"repos/{REPO}/commits/{sha}/check-runs?check_name={CHECK_NAME}"))
-                           for c in teil["check_runs"]
-                           if c["name"] == CHECK_NAME and c["app"]["id"] == PFLICHT_APP_ID]
-              if vorhanden:
-                  gh("api", "-X", "PATCH", f"repos/{REPO}/check-runs/{vorhanden[-1]['id']}", *felder)
-              else:
-                  gh("api", "-X", "POST", f"repos/{REPO}/check-runs", "-f", f"name={CHECK_NAME}",
-                     "-f", f"head_sha={sha}", *felder)
+              # Immer ein neuer Check-Run: ein per PATCH aktualisierter Lauf bleibt in der Check-Suite des alten CI-Laufs
+              # und zaehlt nicht fuer einen PR, der erst spaeter auf demselben Commit entsteht (z. B. neu eroeffneter Branch).
+              # GitHub wertet je Name den neuesten Lauf.
+              gh("api", "-X", "POST", f"repos/{REPO}/check-runs", "-f", f"name={CHECK_NAME}",
+                 "-f", f"head_sha={sha}", *felder)
 
 
           def versuche(*args):
