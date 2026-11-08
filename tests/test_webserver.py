@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import http.client
 import threading
+from pathlib import Path
 
 import pytest
 
@@ -78,6 +79,39 @@ def test_get_und_post_sowie_content_length(server):
     assert kopfwert(kopf, "Content-Length") == str(len(koerper))
 
 
+def test_handler_gibt_anfrage_an_antwort_weiter(server, monkeypatch):
+    gesehen = {}
+
+    def erfassen(methode, pfad, kopf, koerper, kontext):
+        gesehen.update(
+            methode=methode,
+            pfad=pfad,
+            kopf={name.lower(): wert for name, wert in kopf.items()},
+            koerper=koerper,
+            kontext=kontext,
+        )
+        return 201, {"Content-Type": "text/plain", "Content-Length": "999"}, b"neu"
+
+    monkeypatch.setattr(webserver, "antwort", erfassen)
+    status, kopf, koerper = anfrage(
+        server,
+        "POST",
+        "/settings?quelle=test",
+        b"a=1",
+        {"Content-Type": "text/plain", "X-Test": "ja"},
+    )
+
+    assert status == 201
+    assert koerper == b"neu"
+    assert kopfwert(kopf, "Content-Length") == "3"
+    assert kopfwert(kopf, "Content-Type") == "text/plain"
+    assert gesehen["methode"] == "POST"
+    assert gesehen["pfad"] == "/settings?quelle=test"
+    assert gesehen["koerper"] == b"a=1"
+    assert gesehen["kopf"]["x-test"] == "ja"
+    assert "einstellungen_datei" in gesehen["kontext"]
+
+
 def test_methoden_ausser_get_und_post_sind_405(server):
     for methode in ("HEAD", "PUT", "PATCH", "DELETE", "OPTIONS", "CONNECT", "BREW"):
         status, kopf, koerper = anfrage(server, methode, "/settings")
@@ -122,6 +156,13 @@ def test_ungueltige_content_length_liefert_400(server):
     assert b"Anfrage ungueltig" in koerper
 
 
+@pytest.mark.parametrize("wert", ["", "-1", "1.0", "1_0", "+5"])
+def test_content_length_muss_aus_ziffern_bestehen(server, wert):
+    status, _, koerper = anfrage(server, "POST", "/settings", None, {"Content-Length": wert})
+    assert status == 400
+    assert b"Anfrage ungueltig" in koerper
+
+
 def test_keine_logausgabe(server, capfd):
     assert anfrage(server, "GET", "/settings")[0] == 200
     assert "GET /settings" not in capfd.readouterr().err
@@ -140,6 +181,24 @@ def test_main_selbsttest_fehler_ist_rueckgabe_1(monkeypatch, capsys):
     monkeypatch.setattr(webserver, "antwort", lambda *args: (500, {}, b""))
     assert main(["--selbsttest"]) == 1
     assert "Selbsttest fehlgeschlagen" in capsys.readouterr().err
+
+
+def test_main_selbsttest_nutzt_nur_temp_einstellungen(monkeypatch, tmp_path, capsys):
+    gesehen = {}
+
+    def erfassen(methode, pfad, kopf, koerper, kontext):
+        gesehen.update(kontext)
+        return 200, {}, b"<form>"
+
+    monkeypatch.setattr(webserver, "antwort", erfassen)
+    fremd = tmp_path / "fremd.json"
+    assert main(["--selbsttest", "--einstellungen", str(fremd)]) == 0
+    datei = gesehen["einstellungen_datei"]
+    assert isinstance(datei, Path)
+    assert datei.parent != tmp_path
+    assert datei.name == "einstellungen.json"
+    assert not fremd.exists()
+    assert "Selbsttest OK" in capsys.readouterr().out
 
 
 @pytest.mark.parametrize(
@@ -178,6 +237,31 @@ def test_main_startet_mit_einstellungen_und_beendet_bei_strg_c(monkeypatch, tmp_
     }
     assert geschlossen == [True]
     assert "http://127.0.0.1:4321/" in capsys.readouterr().out
+
+
+def test_main_gibt_host_explizit_an(monkeypatch, tmp_path):
+    aufruf = {}
+
+    class FakeServer:
+        server_address = ("127.0.0.1", 4321)
+
+        def serve_forever(self):
+            raise KeyboardInterrupt
+
+        def server_close(self):
+            pass
+
+    def fake_starte(kontext, host, port):
+        aufruf.update(kontext=kontext, host=host, port=port)
+        return FakeServer()
+
+    monkeypatch.setattr(webserver, "starte", fake_starte)
+    assert main(["--port", "0", "--einstellungen", str(tmp_path / "e.json")]) == 0
+    assert aufruf == {
+        "kontext": {"einstellungen_datei": tmp_path / "e.json"},
+        "host": "127.0.0.1",
+        "port": 0,
+    }
 
 
 def test_main_startfehler_ist_rueckgabe_1(monkeypatch, capsys):

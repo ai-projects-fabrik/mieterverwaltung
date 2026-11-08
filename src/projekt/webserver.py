@@ -54,13 +54,14 @@ class _Handler(BaseHTTPRequestHandler):
         )
 
     def _koerper_lesen(self) -> bytes:
-        roh = self.headers.get("Content-Length", "0") or "0"
-        try:
-            laenge = int(roh)
-        except (TypeError, ValueError) as fehler:
-            raise ValueError("Feld 'Content-Length' ist ungueltig") from fehler
-        if laenge < 0:
-            raise ValueError("Feld 'Content-Length' darf nicht negativ sein")
+        roh = self.headers.get("Content-Length")
+        if roh is None:
+            return b""
+
+        text = str(roh).strip()
+        if not text.isascii() or not text.isdigit():
+            raise ValueError("Feld 'Content-Length' ist ungueltig")
+        laenge = int(text)
 
         lesen = min(laenge, _MAX_KOERPER + 1)
         if laenge > _MAX_KOERPER:
@@ -78,6 +79,7 @@ class _Handler(BaseHTTPRequestHandler):
         try:
             koerper = self._koerper_lesen()
         except ValueError:
+            self.close_connection = True
             self._sende(
                 400,
                 {"Content-Type": _HTML_TYP},
@@ -195,7 +197,7 @@ def main(argv: list[str] | None = None) -> int:
 
     kontext = {"einstellungen_datei": Path(args.einstellungen)}
     try:
-        server = starte(kontext, port=args.port)
+        server = starte(kontext, host="127.0.0.1", port=args.port)
     except (OSError, ValueError) as fehler:
         print(f"Fehler: Server konnte nicht gestartet werden: {fehler}", file=sys.stderr)
         return 1
