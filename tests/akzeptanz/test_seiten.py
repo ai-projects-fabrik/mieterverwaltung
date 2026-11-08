@@ -183,7 +183,7 @@ def test_settings_seite():
     assert "table" in seite.tags
     assert seite.felder["objekte_datei"] == "C:/M/objekte.json"
     assert seite.felder["ausgabe_lokal"] == "C:/M/<aus>"
-    for name in ("vorlagen_lokal", "vorlagen_drive", "ausgabe_drive"):
+    for name in ("vorlagen_lokal", "vorlagen_drive", "ausgabe_drive", "pdf_eingang", "pdf_ausgabe"):
         assert seite.felder[name] == ""
     for name in ("neu_id", "neu_bezeichnung", "neu_miete_netto", "neu_nebenkosten", "neu_kaution"):
         assert name in seite.felder
@@ -208,3 +208,12 @@ def test_ergebnisseite():
     assert "v <2>.pdf" in text
     assert "pre" in seite.tags
     assert "li" not in Seite(ergebnis("x", "y", [])).tags
+
+
+def test_ergebnisseite_mit_hinweis():
+    html = ergebnis("T", "b", [], hinweis="PDF wird in Google Drive erzeugt <bald>")
+    assert "<bald>" not in html
+    seite = Seite(html)
+    assert "PDF wird in Google Drive erzeugt <bald>" in "".join(seite.texte)
+    assert "Google Drive" not in "".join(Seite(ergebnis("T", "b", [])).texte)
+    assert "Google Drive" not in "".join(Seite(ergebnis("T", "b", [], hinweis="")).texte)

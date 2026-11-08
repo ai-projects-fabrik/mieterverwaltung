@@ -41,7 +41,7 @@ def laufend(tmp_path):
         json.dumps({"vorlagen_lokal": str(tmp_path / "vl"), "ausgabe_lokal": str(tmp_path / "al")}),
         encoding="utf-8",
     )
-    server = starte({"einstellungen_datei": datei, "konverter": None}, port=0)
+    server = starte({"einstellungen_datei": datei}, port=0)
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
     yield f"http://127.0.0.1:{server.server_address[1]}", tmp_path
@@ -59,7 +59,7 @@ def anfrage(url, felder=None):
 
 
 def test_server_bindet_nur_an_loopback(tmp_path):
-    kontext = {"einstellungen_datei": tmp_path / "e.json", "konverter": None}
+    kontext = {"einstellungen_datei": tmp_path / "e.json"}
     for host in ("0.0.0.0", "", "192.168.1.5", "example.org"):
         with pytest.raises(ValueError):
             starte(kontext, host=host, port=0)

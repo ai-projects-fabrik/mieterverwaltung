@@ -4,8 +4,6 @@ import html
 import importlib.util
 import io
 import json
-import sys
-import textwrap
 import zipfile
 from urllib.parse import urlencode
 
@@ -18,13 +16,6 @@ from projekt.webapp import antwort  # noqa: E402
 
 W = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
 FORM = {"Content-Type": "application/x-www-form-urlencoded"}
-FAKE = textwrap.dedent(
-    """
-    import pathlib, sys
-    outdir, datei = pathlib.Path(sys.argv[5]), pathlib.Path(sys.argv[6])
-    (outdir / (datei.stem + ".pdf")).write_bytes(b"%PDF-fake")
-    """
-)
 VERTRAG = [
     "Mietvertrag fuer {{objekt}}",
     "Mieter: {{mieter_name}}, Beginn {{mietbeginn}}",
@@ -53,7 +44,7 @@ def docx_bytes(absaetze):
 
 @pytest.fixture
 def kontext(tmp_path):
-    for name in ("vl", "vd", "al", "ad"):
+    for name in ("vl", "vd", "al", "ad", "pe", "pa"):
         (tmp_path / name).mkdir()
     (tmp_path / "vl" / "vertrag.docx").write_bytes(docx_bytes(VERTRAG))
     (tmp_path / "vd" / "drive.docx").write_bytes(docx_bytes(VERTRAG))
@@ -64,12 +55,12 @@ def kontext(tmp_path):
         "vorlagen_drive": str(tmp_path / "vd"),
         "ausgabe_lokal": str(tmp_path / "al"),
         "ausgabe_drive": str(tmp_path / "ad"),
+        "pdf_eingang": str(tmp_path / "pe"),
+        "pdf_ausgabe": str(tmp_path / "pa"),
     }
     datei = tmp_path / "einstellungen.json"
     datei.write_text(json.dumps(einstellungen), encoding="utf-8")
-    skript = tmp_path / "fake_soffice.py"
-    skript.write_text(FAKE, encoding="utf-8")
-    return {"einstellungen_datei": datei, "konverter": [sys.executable, str(skript)]}
+    return {"einstellungen_datei": datei}
 
 
 def post(kontext, pfad, felder):
@@ -126,9 +117,9 @@ def test_vertrag_wird_im_gewaehlten_ordner_angelegt(kontext):
     assert ausgabe(kontext) == ["vertrag-bert-beispiel.docx"]
     assert ausgabe(kontext, "ad") == []
     assert "vertrag-bert-beispiel.docx" in html.unescape(body.decode("utf-8"))
-    status, _, _ = post(kontext, "/mietvertrag", vertrag_form(ziel="drive", format="docx+pdf"))
+    status, _, _ = post(kontext, "/mietvertrag", vertrag_form(ziel="drive"))
     assert status == 200
-    assert ausgabe(kontext, "ad") == ["vertrag-bert-beispiel.docx", "vertrag-bert-beispiel.pdf"]
+    assert ausgabe(kontext, "ad") == ["vertrag-bert-beispiel.docx"]
 
 
 def test_anfrage_bericht_und_nie_ueberschreiben(kontext):
@@ -156,17 +147,29 @@ def test_fehler_geben_400_mit_formular_und_schreiben_nichts(kontext):
     assert ausgabe(kontext) == []
 
 
-def test_fehlender_konverter_ist_klare_meldung(kontext):
-    ohne = {**kontext, "konverter": ["/gibt/es/nicht"]}
-    status, _, body = post(ohne, "/mietvertrag", vertrag_form(format="pdf"))
-    assert status == 400
-    assert "Konverter" in body.decode("utf-8")
+def test_pdf_geht_ueber_den_google_ordner_mit_hinweis(kontext):
+    status, _, body = post(kontext, "/mietvertrag", vertrag_form(format="pdf"))
+    text = html.unescape(body.decode("utf-8"))
+    assert status == 200
     assert ausgabe(kontext) == []
+    assert ausgabe(kontext, "pe") == ["vertrag-bert-beispiel.docx"]
+    assert "PDF wird in Google Drive erzeugt" in text
+    assert str(kontext["einstellungen_datei"].parent / "pa") in text
+    status, _, body = post(kontext, "/mietvertrag", vertrag_form(format="docx+pdf"))
+    assert status == 200
+    assert ausgabe(kontext) == ["vertrag-bert-beispiel.docx"]
+    assert ausgabe(kontext, "pe") == ["vertrag-bert-beispiel-2.docx", "vertrag-bert-beispiel.docx"]
+    einst = json.loads(kontext["einstellungen_datei"].read_text(encoding="utf-8"))
+    del einst["pdf_eingang"]
+    kontext["einstellungen_datei"].write_text(json.dumps(einst), encoding="utf-8")
+    status, _, body = post(kontext, "/mietvertrag", vertrag_form(format="pdf"))
+    assert status == 400
+    assert "pdf_eingang" in html.unescape(body.decode("utf-8"))
 
 
 def test_nicht_konfiguriert_verweist_auf_settings(tmp_path):
     datei = tmp_path / "leer.json"
-    kontext = {"einstellungen_datei": datei, "konverter": None}
+    kontext = {"einstellungen_datei": datei}
     status, _, body = antwort("GET", "/mietvertrag", {}, b"", kontext)
     assert status == 200
     assert b"<form" in body

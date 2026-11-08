@@ -3,8 +3,6 @@
 import importlib.util
 import io
 import json
-import sys
-import textwrap
 import xml.etree.ElementTree as ET
 import zipfile
 
@@ -13,16 +11,9 @@ import pytest
 if importlib.util.find_spec("projekt.auftraege") is None:
     pytest.skip("Modul noch nicht umgesetzt", allow_module_level=True)
 
-from projekt.auftraege import erstelle_protokoll, erstelle_vertrag, slug  # noqa: E402
+from projekt.auftraege import FORMATE, erstelle_protokoll, erstelle_vertrag, slug  # noqa: E402
 
 W = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
-FAKE = textwrap.dedent(
-    """
-    import pathlib, sys
-    outdir, datei = pathlib.Path(sys.argv[5]), pathlib.Path(sys.argv[6])
-    (outdir / (datei.stem + ".pdf")).write_bytes(b"%PDF-fake")
-    """
-)
 VERTRAG = [
     "Mietvertrag fuer {{objekt}}",
     "Mieter: {{mieter_name}}, Beginn {{mietbeginn}}",
@@ -33,6 +24,7 @@ PROTOKOLL = [
     "Strom {{zaehler_strom}}, Wasser {{zaehler_wasser}}, Schluessel {{schluessel_anzahl}}",
     "Bemerkungen: {{bemerkungen}}",
 ]
+ORDNER = ("vl", "vd", "al", "ad", "pe", "pa")
 
 
 def docx_bytes(absaetze):
@@ -55,7 +47,7 @@ def absaetze(pfad):
 
 @pytest.fixture
 def kontext(tmp_path):
-    ordner = {n: tmp_path / n for n in ("vl", "vd", "al", "ad")}
+    ordner = {n: tmp_path / n for n in ORDNER}
     for pfad in ordner.values():
         pfad.mkdir()
     (ordner["vl"] / "vertrag.docx").write_bytes(docx_bytes(VERTRAG))
@@ -71,8 +63,6 @@ def kontext(tmp_path):
         }
     ]
     (tmp_path / "objekte.json").write_text(json.dumps(objekte), encoding="utf-8")
-    skript = tmp_path / "fake_soffice.py"
-    skript.write_text(FAKE, encoding="utf-8")
     return {
         "einstellungen": {
             "objekte_datei": str(tmp_path / "objekte.json"),
@@ -80,8 +70,9 @@ def kontext(tmp_path):
             "vorlagen_drive": str(ordner["vd"]),
             "ausgabe_lokal": str(ordner["al"]),
             "ausgabe_drive": str(ordner["ad"]),
+            "pdf_eingang": str(ordner["pe"]),
+            "pdf_ausgabe": str(ordner["pa"]),
         },
-        "konverter": [sys.executable, str(skript)],
         "ordner": ordner,
     }
 
@@ -98,11 +89,16 @@ def basis():
     }
 
 
+def namen(kontext, ordner):
+    return sorted(p.name for p in kontext["ordner"][ordner].iterdir())
+
+
 def leer(kontext):
-    return all(not list(p.iterdir()) for n, p in kontext["ordner"].items() if n in ("al", "ad"))
+    return all(not namen(kontext, n) for n in ("al", "ad", "pe", "pa"))
 
 
-def test_slug():
+def test_formate_und_slug():
+    assert FORMATE == ("docx", "pdf", "docx+pdf")
     assert slug("Anna Müller-Meier") == "anna-mueller-meier"
     assert slug("../../Evil") == "evil"
     assert slug("Groß & Söhne AG") == "gross-soehne-ag"
@@ -113,13 +109,15 @@ def test_slug():
 def test_vertrag_aus_objekt_und_formularfeldern(kontext):
     ergebnis = erstelle_vertrag(basis(), kontext)
     assert ergebnis["dateien"] == ["vertrag-bert-beispiel.docx"]
+    assert ergebnis["pdf_auftrag"] is None
+    assert ergebnis["hinweis"] == ""
     assert "keine Aenderungen" in ergebnis["bericht"]
     assert absaetze(kontext["ordner"]["al"] / "vertrag-bert-beispiel.docx") == [
         "Mietvertrag fuer Musterweg 1, 8000 Zuerich",
         "Mieter: Bert Beispiel, Beginn 01.01.2026",
         "Netto 1'200.00 plus NK 200.00, Kaution 3'600.00",
     ]
-    assert not list(kontext["ordner"]["ad"].iterdir())
+    assert namen(kontext, "ad") == namen(kontext, "pe") == namen(kontext, "pa") == []
 
 
 def test_formularwerte_und_anfrage_ueberschreiben_schrittweise(kontext):
@@ -133,20 +131,46 @@ def test_formularwerte_und_anfrage_ueberschreiben_schrittweise(kontext):
     assert text[2] == "Netto 1'300.00 plus NK 200.00, Kaution 4'000.00"
 
 
-def test_vorlage_und_ziel_drive_und_formate(kontext):
-    form = {**basis(), "vorlage": "drive:drive-vertrag.docx", "ziel": "drive", "format": "docx+pdf"}
+def test_vorlage_und_ziel_drive(kontext):
+    form = {**basis(), "vorlage": "drive:drive-vertrag.docx", "ziel": "drive"}
     ergebnis = erstelle_vertrag(form, kontext)
-    assert ergebnis["dateien"] == ["vertrag-bert-beispiel.docx", "vertrag-bert-beispiel.pdf"]
-    assert sorted(p.name for p in kontext["ordner"]["ad"].iterdir()) == ergebnis["dateien"]
-    assert not list(kontext["ordner"]["al"].iterdir())
-    nur_pdf = erstelle_vertrag({**basis(), "format": "pdf"}, kontext)
-    assert nur_pdf["dateien"] == ["vertrag-bert-beispiel.pdf"]
+    assert ergebnis["dateien"] == ["vertrag-bert-beispiel.docx"]
+    assert namen(kontext, "ad") == ["vertrag-bert-beispiel.docx"]
+    assert namen(kontext, "al") == []
+
+
+def test_pdf_geht_ueber_den_google_ordner_ohne_konverter(kontext):
+    ergebnis = erstelle_vertrag({**basis(), "format": "pdf"}, kontext)
+    assert ergebnis["dateien"] == []
+    assert ergebnis["pdf_auftrag"] == "vertrag-bert-beispiel.docx"
+    assert namen(kontext, "pe") == ["vertrag-bert-beispiel.docx"]
+    assert namen(kontext, "al") == namen(kontext, "ad") == namen(kontext, "pa") == []
+    assert "PDF wird in Google Drive erzeugt" in ergebnis["hinweis"]
+    assert str(kontext["ordner"]["pa"]) in ergebnis["hinweis"]
+    assert "nach wenigen Minuten" in ergebnis["hinweis"]
+    inhalt = absaetze(kontext["ordner"]["pe"] / "vertrag-bert-beispiel.docx")
+    assert inhalt[1] == "Mieter: Bert Beispiel, Beginn 01.01.2026"
+
+
+def test_docx_und_pdf_schreibt_beides(kontext):
+    form = {**basis(), "format": "docx+pdf", "ziel": "drive"}
+    ergebnis = erstelle_vertrag(form, kontext)
+    assert ergebnis["dateien"] == ["vertrag-bert-beispiel.docx"]
+    assert ergebnis["pdf_auftrag"] == "vertrag-bert-beispiel.docx"
+    assert namen(kontext, "ad") == ["vertrag-bert-beispiel.docx"]
+    assert namen(kontext, "pe") == ["vertrag-bert-beispiel.docx"]
+    assert "Google Drive" in ergebnis["hinweis"]
+    assert namen(kontext, "al") == []
 
 
 def test_vorhandene_dateien_werden_nie_ueberschrieben(kontext):
     erstelle_vertrag(basis(), kontext)
     zweites = erstelle_vertrag(basis(), kontext)
     assert zweites["dateien"] == ["vertrag-bert-beispiel-2.docx"]
+    erstelle_vertrag({**basis(), "format": "pdf"}, kontext)
+    zweites = erstelle_vertrag({**basis(), "format": "pdf"}, kontext)
+    assert zweites["pdf_auftrag"] == "vertrag-bert-beispiel-2.docx"
+    assert namen(kontext, "pe") == ["vertrag-bert-beispiel-2.docx", "vertrag-bert-beispiel.docx"]
 
 
 @pytest.mark.parametrize(
@@ -169,17 +193,17 @@ def test_fehler_nennen_das_feld_und_schreiben_nichts(kontext, aenderung, nennt):
     assert leer(kontext)
 
 
-def test_fehlende_einstellungen_und_konverter(kontext):
-    ohne = {
-        **kontext,
-        "einstellungen": {"objekte_datei": kontext["einstellungen"]["objekte_datei"]},
-    }
+def test_fehlende_einstellungen(kontext):
+    einst = kontext["einstellungen"]
+    ohne = {**kontext, "einstellungen": {"objekte_datei": einst["objekte_datei"]}}
     with pytest.raises(ValueError, match="vorlagen_lokal"):
         erstelle_vertrag(basis(), ohne)
-    ohne_konverter = {**kontext, "konverter": [str(kontext["ordner"]["al"] / "fehlt")]}
-    with pytest.raises(ValueError, match="Konverter"):
-        erstelle_vertrag({**basis(), "format": "docx+pdf"}, ohne_konverter)
+    ohne_pdf = {k: v for k, v in einst.items() if k != "pdf_eingang"}
+    for fmt in ("pdf", "docx+pdf"):
+        with pytest.raises(ValueError, match="pdf_eingang"):
+            erstelle_vertrag({**basis(), "format": fmt}, {**kontext, "einstellungen": ohne_pdf})
     assert leer(kontext)
+    assert erstelle_vertrag(basis(), {**kontext, "einstellungen": ohne_pdf})["dateien"]
 
 
 def test_ohne_objekt_genuegen_formularfelder(kontext):
@@ -218,7 +242,11 @@ def protokoll_form():
 
 def test_protokoll_mit_objekt_aus_dem_dropdown(kontext):
     ergebnis = erstelle_protokoll(protokoll_form(), kontext)
-    assert ergebnis == {"dateien": ["uebergabeprotokoll-anna-muster.docx"]}
+    assert ergebnis == {
+        "dateien": ["uebergabeprotokoll-anna-muster.docx"],
+        "pdf_auftrag": None,
+        "hinweis": "",
+    }
     assert absaetze(kontext["ordner"]["al"] / "uebergabeprotokoll-anna-muster.docx") == [
         "Einzug: Anna Muster in Musterweg 1, 8000 Zuerich am 01.02.2026",
         "Strom 1234.5, Wasser 56, Schluessel 3",
@@ -227,8 +255,11 @@ def test_protokoll_mit_objekt_aus_dem_dropdown(kontext):
 
 
 def test_protokoll_pdf_und_fehler(kontext):
-    ergebnis = erstelle_protokoll({**protokoll_form(), "format": "pdf", "ziel": "drive"}, kontext)
-    assert ergebnis["dateien"] == ["uebergabeprotokoll-anna-muster.pdf"]
+    ergebnis = erstelle_protokoll({**protokoll_form(), "format": "pdf"}, kontext)
+    assert ergebnis["dateien"] == []
+    assert ergebnis["pdf_auftrag"] == "uebergabeprotokoll-anna-muster.docx"
+    assert namen(kontext, "pe") == ["uebergabeprotokoll-anna-muster.docx"]
+    assert "Google Drive" in ergebnis["hinweis"]
     for aenderung, nennt in [
         ({"art": "Besichtigung"}, "art"),
         ({"zaehler_strom": "-1"}, "zaehler_strom"),
@@ -238,4 +269,4 @@ def test_protokoll_pdf_und_fehler(kontext):
     ]:
         with pytest.raises(ValueError, match=nennt):
             erstelle_protokoll({**protokoll_form(), **aenderung}, kontext)
-    assert [p.name for p in kontext["ordner"]["al"].iterdir()] == []
+    assert namen(kontext, "al") == namen(kontext, "ad") == []

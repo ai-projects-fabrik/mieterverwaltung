@@ -15,6 +15,7 @@ from projekt.einstellungen import (  # noqa: E402
     lade_einstellungen,
     normalisiere_einstellungen,
     ordner,
+    pdf_ordner,
     speichere_einstellungen,
 )
 
@@ -24,6 +25,8 @@ VOLL = {
     "vorlagen_drive": "G:/Mein Drive/Vorlagen",
     "ausgabe_lokal": "C:/Mieter/ausgabe",
     "ausgabe_drive": "G:/Mein Drive/Ausgabe",
+    "pdf_eingang": "G:/Mein Drive/zu-pdf",
+    "pdf_ausgabe": "G:/Mein Drive/pdf-fertig",
 }
 
 
@@ -34,6 +37,8 @@ def test_felder_und_normalisierung():
         "vorlagen_drive",
         "ausgabe_lokal",
         "ausgabe_drive",
+        "pdf_eingang",
+        "pdf_ausgabe",
     )
     assert normalisiere_einstellungen(VOLL) == VOLL
     assert normalisiere_einstellungen({"ausgabe_lokal": "  C:/x  "}) == {"ausgabe_lokal": "C:/x"}
@@ -109,3 +114,12 @@ def test_ordner_fehler():
         ordner(VOLL, "sonstiges", "lokal")
     with pytest.raises(ValueError, match="ort"):
         ordner(VOLL, "vorlagen", "cloud")
+
+
+def test_pdf_ordner():
+    assert pdf_ordner(VOLL, "eingang") == Path("G:/Mein Drive/zu-pdf")
+    assert pdf_ordner(VOLL, "ausgabe") == Path("G:/Mein Drive/pdf-fertig")
+    with pytest.raises(ValueError, match="pdf_eingang"):
+        pdf_ordner({"pdf_ausgabe": "x"}, "eingang")
+    with pytest.raises(ValueError, match="art"):
+        pdf_ordner(VOLL, "sonstiges")
