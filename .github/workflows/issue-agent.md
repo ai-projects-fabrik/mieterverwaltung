@@ -13,11 +13,11 @@ permissions:
 # Wechsel: Datei aus ai-projects/anbieter/ dorthin kopieren, Secret setzen, gh aw compile.
 imports:
   - shared/anbieter.md
-# Konservatives Standardbudget (1 AIC = 0.01 USD): Agent 6 + Pruefjob 2 AIC je Lauf (0.08 USD), 80 AIC je 24 h (Betreiber).
+# Konservatives Standardbudget (1 AIC = 0.01 USD): Agent 12 + Pruefjob 2 AIC je Lauf, 300 AIC (3 USD) je 24 h (Betreiberentscheid 2026-11-08).
 # Reale Laeufe: Median ca. 1.2, Maximum 3.1 AIC. Erhoehen nur bewusst je Projekt (Neukompilieren noetig).
 timeout-minutes: 30
 max-ai-credits: 12
-max-daily-ai-credits: 150
+max-daily-ai-credits: 300
 network:
   allowed:
     - defaults
