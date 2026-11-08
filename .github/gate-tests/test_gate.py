@@ -390,6 +390,83 @@ R(
         writes=A,
     )
 )
+RISIKO_SRC = datei("src/p/a.py", patch="@@ -0,0 +1 @@\n+import subprocess\n")
+RISIKO_UEBERGABE = ["disable-auto", "label-create", "issue-edit --add-label needs-operator"]
+R(
+    lauf(
+        "Pipeline: einziger Verstoss riskanter Import -> gruen mit Hinweis, Auto-Merge aus",
+        "pass",
+        [RISIKO_SRC, datei("tests/test_a.py")],
+        writes=RISIKO_UEBERGABE,
+        check=["check success"],
+        stdout=["Mensch merged"],
+    )
+)
+R(
+    lauf(
+        "Pipeline: riskanter Import plus anderer Verstoss -> rot",
+        "fail",
+        [RISIKO_SRC, datei("tests/test_a.py"), datei("pyproject.toml")],
+        writes=D,
+        check=["check failure"],
+    )
+)
+R(
+    lauf(
+        "Pipeline: riskanter Import in Eigentuemer-PR bleibt wie bisher",
+        "pass",
+        [RISIKO_SRC, datei("tests/test_a.py")],
+        prd=pr(user={"login": "o", "type": "User"}),
+        writes=A,
+    )
+)
+FREMD = [datei("src/p/a.py"), datei("tests/test_a.py"), datei("docs/x.md")]
+FREMD_AUFTRAG = {"body": "**Datei:** `src/p/a.py` `tests/test_a.py`", "state": "open"}
+R(
+    lauf(
+        "Pipeline: Datei nicht im Auftrag -> rot und ein Retry",
+        "fail",
+        FREMD,
+        issue=FREMD_AUFTRAG,
+        writes=["issue-comment", "pr-close", "neu-dispatch main", "disable-auto"],
+        check=["check failure"],
+        stdout=["Retry fuer Issue #1 angefordert"],
+    )
+)
+R(
+    lauf(
+        "Pipeline: Datei nicht im Auftrag, Retry schon erfolgt -> rot ohne Retry",
+        "fail",
+        FREMD,
+        issue=FREMD_AUFTRAG,
+        marker=("retry_marker",),
+        writes=D,
+        check=["check failure"],
+        stdout=["kein Retry"],
+    )
+)
+R(
+    lauf(
+        "Pipeline: Marker-Kommentar scheitert -> rot, PR bleibt offen",
+        "fail",
+        FREMD,
+        issue=FREMD_AUFTRAG,
+        marker=("fail_comment",),
+        writes=D,
+        check=["check failure"],
+        stdout=["Marker nicht gesetzt"],
+    )
+)
+R(
+    lauf(
+        "Pipeline: Datei nicht im Auftrag plus anderer Verstoss -> rot ohne Retry",
+        "fail",
+        [*FREMD, datei("pyproject.toml")],
+        issue=FREMD_AUFTRAG,
+        writes=D,
+        check=["check failure"],
+    )
+)
 R(
     lauf(
         "src importiert subprocess",

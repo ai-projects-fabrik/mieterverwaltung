@@ -147,3 +147,33 @@ def test_backlog_issue_wird_ohne_eigentuemer_assoziation_uebergeben():
     assert ok
     ok, grund = ad.entscheide(i, "on", {"test_preis.py"}, 0, 0, ziele=[])
     assert not ok and "Autor" in grund
+
+
+def test_neu_stilles_pruefen_kommentiert_nicht(monkeypatch):
+    """Zeitplan-Neupruefung (NEU_STILL=1): bei Ablehnung kein Kommentar im Issue."""
+    aufrufe = []
+
+    def fake_gh(*args, token=None):
+        aufrufe.append(args)
+        if args[:2] == ("api", "repos/o/r/issues/5"):
+            return '{"state": "open", "labels": [], "body": "", "author_association": "NONE"}'
+        if args[0] == "api" and "pulls" in args[1]:
+            return "[]"
+        if args[0] == "api" and "actions" in args[1]:
+            return '{"workflow_runs": []}'
+        if args[0] == "api" and args[1] == "repos/o/r":
+            return '{"default_branch": "main"}'
+        raise_ = args[0] == "api" and "contents" in args[1]
+        if raise_:
+            raise ad.subprocess.CalledProcessError(1, "gh")
+        return "[]"
+
+    monkeypatch.setattr(ad, "gh", fake_gh)
+    monkeypatch.setenv("GH_REPO", "o/r")
+    monkeypatch.setenv("AGENT_AUTO", "on")
+    monkeypatch.setenv("NEU_STILL", "1")
+    assert ad.main(["x", "5"]) == 0
+    assert not any(a[:2] == ("issue", "comment") for a in aufrufe)
+    monkeypatch.delenv("NEU_STILL")
+    assert ad.main(["x", "5"]) == 0
+    assert any(a[:2] == ("issue", "comment") for a in aufrufe)
