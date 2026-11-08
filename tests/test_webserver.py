@@ -187,3 +187,4 @@ def test_main_startfehler_ist_rueckgabe_1(monkeypatch, capsys):
     monkeypatch.setattr(webserver, "starte", fehlschlag)
     assert main([]) == 1
     assert "Server konnte nicht gestartet werden" in capsys.readouterr().err
+# Betreiber-PR #47
