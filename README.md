@@ -26,8 +26,8 @@ Konventionen: `ai-projects/KONVENTIONEN.md`.
 
 ## Kostenbremsen
 
-Standardbudget (1 AIC = 0.01 USD): Agent hoechstens 6 AI-Credits pro Lauf, Pruefjob 2 (zusammen 0.08 USD),
-alle Laeufe zusammen 20 pro 24 Stunden, hoechstens 30 Minuten. Der Proxy stoppt Anfragen ueber dem Limit
+Standardbudget (1 AIC = 0.01 USD): Agent hoechstens 12 AI-Credits pro Lauf, Pruefjob 2,
+alle Laeufe zusammen 300 pro 24 Stunden (3 USD, Betreiberentscheid 2026-11-08), hoechstens 30 Minuten. Der Proxy stoppt Anfragen ueber dem Limit
 (Lauf endet ohne PR). Reale Laeufe: Median ca. 1.2, Maximum 3.1 AIC; Limit je Projekt nur bewusst erhoehen
 (`max-ai-credits` im Frontmatter, danach neu kompilieren). Harte Grenze zusaetzlich: Prepaid-Guthaben beim Anbieter.
 
