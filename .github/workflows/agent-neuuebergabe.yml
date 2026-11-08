@@ -2,7 +2,7 @@ name: Agent-Neuuebergabe
 
 # Zeitplan (stuendlich): uebergibt Issues nach Tages-/Laufgrenze automatisch neu (siehe .github/betrieb/neuuebergabe.py). Ohne AGENT_AUTO=on
 # passiert (und kostet) nichts; Abbrueche am Tagesbudget kosten keine AIC. Neue Rechte gibt es nicht: Issues-Label per kurzlebigem App-Token
-# (nur dieses Repo, Issues-Schreibrecht), Code nur vom Standard-Branch. Der Issue-Text wird nie ausgefuehrt.
+# (nur dieses Repo, Issues- und Pull-Request-Schreibrecht), Code nur vom Standard-Branch. Der Issue-Text wird nie ausgefuehrt.
 
 on:
   schedule:
@@ -44,6 +44,7 @@ jobs:
           repositories: ${{ github.event.repository.name }}
           github-api-url: ${{ github.api_url }}
           permission-issues: write
+          permission-pull-requests: write # nur: haengenden Agenten-PR schliessen und wieder oeffnen
       - name: Neu uebergeben
         env:
           GH_TOKEN: ${{ github.token }}

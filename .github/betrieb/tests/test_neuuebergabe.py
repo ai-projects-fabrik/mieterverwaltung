@@ -106,3 +106,41 @@ def test_retry_nach_verworfenem_pr_braucht_gate_marker_nach_dem_label():
     assert ok and "Retry" in grund
     assert not nu.entscheide(issue(), T0, ohne_abbruch, frueher, set(), JETZT)[0]
     assert not nu.entscheide(issue(), T0, ohne_abbruch, spaeter, {43}, JETZT)[0]
+
+
+def pr_haengt(**kw):
+    p = {
+        "state": "open",
+        "draft": False,
+        "user": {"type": "Bot"},
+        "mergeable_state": "blocked",
+        "updated_at": iso(T0),
+        "head": {"sha": "abc"},
+    }
+    p.update(kw)
+    return p
+
+
+GRUEN = [{"name": "test", "conclusion": "success"}, {"name": "agent-gate", "conclusion": "success"}]
+
+
+def test_haengender_agenten_pr_wird_erkannt():
+    assert nu.haengt(pr_haengt(), GRUEN, [], JETZT)
+
+
+def test_kein_anstoss_wenn_etwas_anderes_blockiert_oder_zu_frisch():
+    assert not nu.haengt(pr_haengt(mergeable_state="clean"), GRUEN, [], JETZT)
+    assert not nu.haengt(pr_haengt(updated_at=iso(JETZT - timedelta(minutes=5))), GRUEN, [], JETZT)
+    assert not nu.haengt(pr_haengt(draft=True), GRUEN, [], JETZT)
+    assert not nu.haengt(pr_haengt(user={"type": "User"}), GRUEN, [], JETZT)
+    assert not nu.haengt(pr_haengt(state="closed"), GRUEN, [], JETZT)
+    assert not nu.haengt(pr_haengt(), GRUEN[:1], [], JETZT)
+    assert not nu.haengt(
+        pr_haengt(), [GRUEN[0], {"name": "agent-gate", "conclusion": "failure"}], [], JETZT
+    )
+
+
+def test_anstoss_nur_einmal_je_commit():
+    marke = [{"body": "<!-- neustoss:abc -->\nProtokoll"}]
+    assert not nu.haengt(pr_haengt(), GRUEN, marke, JETZT)
+    assert nu.haengt(pr_haengt(head={"sha": "neu"}), GRUEN, marke, JETZT)

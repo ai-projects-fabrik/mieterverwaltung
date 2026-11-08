@@ -66,6 +66,29 @@ if a[0] == "api":
         concl = [x.split("=", 1)[1] for x in a if x.startswith("conclusion=")][0]
         log(("check-patch " if methode == "PATCH" else "check ") + concl)
         log("tok check " + wer())
+    elif "/check-runs" in path and "check_name" in query and hat("gate_run.json"):
+        print(load("gate_run.json"))
+    elif re.search(r"/check-suites/[0-9]+$", roh):
+        nach = hat("suite_nach.json") and geschrieben("suite-neu")
+        print(load("suite_nach.json" if nach else "suite.json"))
+    elif methode == "POST" and roh.endswith("/check-suites"):
+        log("suite-neu")
+        print("{}")
+    elif methode == "POST" and roh.endswith("/git/commits"):
+        log("leer-commit")
+        print(json.dumps({"sha": "n" * 40}))
+    elif methode == "PATCH" and "/git/refs/heads/" in path:
+        log("leer-ref")
+        log("tok leer-ref " + wer())
+    elif re.search(r"/git/commits/[0-9a-f]{40}$", roh):
+        print(
+            json.dumps(
+                {
+                    "tree": {"sha": "t" * 40},
+                    "message": "x [gate] Leerer Commit" if hat("leer_marker") else "x",
+                }
+            )
+        )
     elif methode == "DELETE" and "/git/refs/heads/" in path:
         if hat("fail_delete"):
             fehler("HTTP 403: Resource not accessible by integration", 1)

@@ -85,3 +85,15 @@ def test_gruende_sind_eindeutig_und_sortiert():
     assert not ok
     assert gruende == sorted(set(gruende))
     assert len(gruende) == 1
+
+
+def test_workflow_hat_kein_if_am_job():
+    """Ein uebersprungener Job ergibt eine Suite 'skipped': agent-gate wird dort nicht gewertet."""
+    import yaml
+
+    wf = yaml.safe_load(
+        (Path(__file__).resolve().parents[2] / "workflows" / "auto-merge.yml").read_text(
+            encoding="utf-8"
+        )
+    )
+    assert all("if" not in job for job in wf["jobs"].values())
