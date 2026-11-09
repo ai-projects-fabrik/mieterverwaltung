@@ -15,7 +15,9 @@ from projekt.googleauth import (  # noqa: E402
     SCOPE,
     anmelde_url,
     code_aus_redirect,
+    client_pfad,
     lade_client,
+    lade_client_datei,
     lade_token,
     neues_pkce,
     speichere_token,
@@ -193,12 +195,12 @@ def test_token_gueltig_mit_puffer():
 
 def test_token_datei(tmp_path):
     pfad = token_pfad(tmp_path)
-    assert pfad == tmp_path / ".mieterverwaltung" / "google_token.json"
+    assert pfad == tmp_path / ".mieterverwaltung" / "google-token.json"
     assert lade_token(pfad) == {}
     token = {"access_token": "a", "refresh_token": "r", "ablauf": 5.5}
     speichere_token(pfad, token)
     assert lade_token(pfad) == token
-    assert [p.name for p in pfad.parent.iterdir()] == ["google_token.json"]
+    assert [p.name for p in pfad.parent.iterdir()] == ["google-token.json"]
     speichere_token(pfad, {**token, "access_token": "b"})
     assert lade_token(pfad)["access_token"] == "b"
     with pytest.raises(ValueError, match="refresh_token"):
@@ -211,3 +213,17 @@ def test_kaputte_token_datei_ergibt_leer(tmp_path):
     for inhalt in ("{kaputt", "[1]", '{"access_token": "a"}'):
         pfad.write_text(inhalt, encoding="utf-8")
         assert lade_token(pfad) == {}
+
+
+def test_client_datei_hat_festen_standardpfad(tmp_path):
+    pfad = client_pfad(tmp_path)
+    assert pfad == tmp_path / ".mieterverwaltung" / "google-client.json"
+    with pytest.raises(ValueError, match="google-client.json") as fehler:
+        lade_client_datei(pfad)
+    assert "fehlt" in str(fehler.value) and str(tmp_path) in str(fehler.value)
+    pfad.parent.mkdir()
+    pfad.write_text(CLIENT_JSON, encoding="utf-8")
+    assert lade_client_datei(pfad) == client()
+    pfad.write_text("{kaputt", encoding="utf-8")
+    with pytest.raises(ValueError, match="JSON"):
+        lade_client_datei(pfad)

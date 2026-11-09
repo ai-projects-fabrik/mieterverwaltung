@@ -24,14 +24,15 @@ Zugang an. Alle Schritte mit dem Konto, dem die Dateien zugaenglich sind (swisss
    Anmeldung nach 7 Tagen ab. Fuer eine nur von dir genutzte App ist keine Google-Pruefung noetig.)
 4. **Zugangsdaten** (einmalig): *Anmeldedaten > Anmeldedaten erstellen > OAuth-Client-ID*, Anwendungstyp
    **Desktop-App**, Name `Mietverwaltung`, Erstellen, **JSON herunterladen**.
-5. Die Datei speichern als `C:\Users\NEO\.mieterverwaltung\google_client.json` (Ordner anlegen, falls er
+5. Die Datei speichern als `C:\Users\NEO\.mieterverwaltung\google-client.json` (Ordner anlegen, falls er
    fehlt). Sie liegt nie im Repo.
-6. **Einmal anmelden:** in der App unter *Einstellungen* auf *Mit Google verbinden*. Der Browser oeffnet
-   sich. Konto waehlen. Erscheint *Google hat diese App nicht ueberprueft*, auf *Erweitert > Weiter zu
+6. **Einmal anmelden:** beim ersten Zugriff auf Google (Vorlagenliste oder *Einstellungen > Mit Google
+   verbinden*) oeffnet die App den Browser selbst. Fehlt `google-client.json`, zeigt sie stattdessen einen
+   klaren Hinweis mit dem erwarteten Pfad. Konto waehlen. Erscheint *Google hat diese App nicht ueberprueft*, auf *Erweitert > Weiter zu
    Mietverwaltung* klicken (die App ist deine eigene). Zugriff *Dateien in Google Drive ansehen* erlauben.
    Die Seite meldet *Fertig*; der Browser-Tab kann zu.
 
-Danach laeuft alles ohne weitere Schritte; das Token liegt in `~/.mieterverwaltung/google_token.json` und
+Danach laeuft alles ohne weitere Schritte; das Token liegt in `~/.mieterverwaltung/google-token.json` und
 erneuert sich selbst. Zugriff widerrufen: <https://myaccount.google.com/permissions> (App entfernen).
 
 ## Welche Dateien erscheinen

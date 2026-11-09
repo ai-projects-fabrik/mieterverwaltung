@@ -52,7 +52,7 @@ das Projekt nur aus einer Aufgabe besteht.
 | `vorauswahl.py` | `vorauswahl`, `merke` | Standardwerte der Formulare |
 | `seiten_einfach.py` | `TABS_EINFACH`, `rahmen_einfach`, `formular_ordner`, `formular_objekttabelle`, `formular_vertrag`, `formular_uebergabe` | nur HTML, maskiert |
 | `webapp_einfach.py` | `antwort(methode, pfad, kopf, koerper, kontext)` | ohne Socket; Nachfolger von `webapp.py` |
-| `googleauth.py` | `SCOPE`, `lade_client`, `neues_pkce`, `anmelde_url`, `code_aus_redirect`, `token_anfrage_code`, `token_anfrage_refresh`, `token_aus_antwort`, `token_gueltig`, `token_pfad`, `lade_token`, `speichere_token` | Google-OAuth (Loopback, PKCE) ohne Netzwerk; Token nur unter `~/.mieterverwaltung` |
+| `googleauth.py` | `SCOPE`, `lade_client`, `neues_pkce`, `anmelde_url`, `code_aus_redirect`, `token_anfrage_code`, `token_anfrage_refresh`, `token_aus_antwort`, `token_gueltig`, `client_pfad`, `lade_client_datei`, `token_pfad`, `lade_token`, `speichere_token` | Google-OAuth (Loopback, PKCE) ohne Netzwerk; Client-Datei `google-client.json` und Token `google-token.json` nur unter `~/.mieterverwaltung` |
 | `gdrive.py` | `GOOGLE_DOC`, `WORD`, `STICHWORTE`, `passt`, `liste_anfrage`, `auswerte_liste`, `abruf_anfrage` | Drive-API-Anfragen und -Antworten ohne Netzwerk |
 | `googlehttp.py` | Transport, Anmeldung, Abruf | Mensch-gemergt (Netzwerk); spaeter, siehe `docs/google-einrichtung.md` |
 
