@@ -13,7 +13,7 @@ Mietvertrag per Anfrage auf den aktuellen Mieter anpassen (Vorlage .docx, Platzh
 
 ## Fachregeln
 
-- Nur Standardbibliothek; keine Netzwerkzugriffe ausser dem lokalen Webserver auf 127.0.0.1 (nur `gui.py` und `webserver.py`); kein Subprozess, kein Google-Code, keine echten Personendaten, in Tests nur erfundene Daten.
+- Nur Standardbibliothek; keine Netzwerkzugriffe ausser dem lokalen Webserver auf 127.0.0.1 (nur `gui.py` und `webserver.py`) und dem Google-Zugriff der App (nur `googlehttp.py`, von einem Menschen gebaut und gemergt); kein Subprozess, keine echten Personendaten, in Tests nur erfundene Daten. Die Module `googleauth.py` und `gdrive.py` sind reine Logik ohne Netzwerk (kein `urllib.request`, kein `http`).
 - Der Vertragstext bleibt fest; nur die Felder aus `projekt.felder` sind veraenderlich (Platzhalter `{{feldname}}` in der .docx-Vorlage). Das Uebergabeprotokoll hat eigene Felder in `projekt.protokoll`.
 - Stammdaten, Einstellungen, Vorlagen und Ausgaben liegen lokal ausserhalb des Repos; Google Drive nur als synchronisierter Ordner (Google Drive fuer Desktop). PDFs entstehen durch ein Google-Apps-Script im Drive des Betreibers (siehe `docs/apps-script-pdf.md`), nicht im Programm.
 - Betraege in CHF mit Apostroph-Tausendern und zwei Nachkommastellen, Daten als `DD.MM.YYYY`.
@@ -52,6 +52,9 @@ das Projekt nur aus einer Aufgabe besteht.
 | `vorauswahl.py` | `vorauswahl`, `merke` | Standardwerte der Formulare |
 | `seiten_einfach.py` | `TABS_EINFACH`, `rahmen_einfach`, `formular_ordner`, `formular_objekttabelle`, `formular_vertrag`, `formular_uebergabe` | nur HTML, maskiert |
 | `webapp_einfach.py` | `antwort(methode, pfad, kopf, koerper, kontext)` | ohne Socket; Nachfolger von `webapp.py` |
+| `googleauth.py` | `SCOPE`, `lade_client`, `neues_pkce`, `anmelde_url`, `code_aus_redirect`, `token_anfrage_code`, `token_anfrage_refresh`, `token_aus_antwort`, `token_gueltig`, `token_pfad`, `lade_token`, `speichere_token` | Google-OAuth (Loopback, PKCE) ohne Netzwerk; Token nur unter `~/.mieterverwaltung` |
+| `gdrive.py` | `GOOGLE_DOC`, `WORD`, `STICHWORTE`, `passt`, `liste_anfrage`, `auswerte_liste`, `abruf_anfrage` | Drive-API-Anfragen und -Antworten ohne Netzwerk |
+| `googlehttp.py` | Transport, Anmeldung, Abruf | Mensch-gemergt (Netzwerk); spaeter, siehe `docs/google-einrichtung.md` |
 
 ## Arbeitsablauf
 
