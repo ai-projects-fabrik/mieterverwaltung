@@ -140,6 +140,21 @@ def test_kein_anstoss_wenn_etwas_anderes_blockiert_oder_zu_frisch():
     )
 
 
+def test_pr_ohne_check_runs_wird_nach_20_minuten_angestossen():
+    assert nu.haengt(pr_haengt(mergeable_state="unknown"), [], [], JETZT)
+    assert not nu.haengt(
+        pr_haengt(mergeable_state="unknown", updated_at=iso(JETZT - timedelta(minutes=5))),
+        [],
+        [],
+        JETZT,
+    )
+    assert not nu.haengt(pr_haengt(draft=True), [], [], JETZT)
+    assert not nu.haengt(pr_haengt(user={"type": "User"}), [], [], JETZT)
+    marke = [{"body": "<!-- neustoss:abc -->"}]
+    assert not nu.haengt(pr_haengt(), [], marke, JETZT)
+    assert nu.haengt(pr_haengt(head={"sha": "neu"}), [], marke, JETZT)
+
+
 def test_anstoss_nur_einmal_je_commit():
     marke = [{"body": "<!-- neustoss:abc -->\nProtokoll"}]
     assert not nu.haengt(pr_haengt(), GRUEN, marke, JETZT)
