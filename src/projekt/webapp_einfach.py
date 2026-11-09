@@ -138,6 +138,52 @@ def _vorlagen_hinweise(einstellungen: dict[str, str], vorlagen: dict[str, list[s
     return hinweise
 
 
+def _google(kontext: object):
+    """Die Google-Quelle aus dem Kontext (Schluessel ``google``) oder ``None``."""
+
+    quelle = kontext.get("google") if isinstance(kontext, dict) else None
+    return quelle if hasattr(quelle, "vorlagen") else None
+
+
+def _mit_google(kontext: object, vorlagen: dict, hinweise: list[str]) -> list[dict]:
+    """Traegt Google-Vorlagen in ``vorlagen`` ein, haengt Hinweise an, liefert die Dateien."""
+
+    quelle = _google(kontext)
+    if quelle is None:
+        return []
+    dateien, meldungen = quelle.vorlagen()
+    hinweise.extend(meldungen)
+    if dateien:
+        vorlagen["google"] = dateien
+    return dateien
+
+
+def _google_vorwahl(werte: dict, letzte: dict, art: str, dateien: list[dict]) -> dict:
+    """Waehlt eine Google-Vorlage vor, wenn zuletzt benutzt oder sonst keine vorhanden."""
+
+    ids = {f"google:{datei['id']}" for datei in dateien}
+    gemerkt = letzte.get(f"{art}_vorlage")
+    if gemerkt in ids:
+        return {**werte, "vorlage": gemerkt}
+    if not werte.get("vorlage") and dateien:
+        stichwort = "vertrag" if art == "vertrag" else "protokoll"
+        passende = [d for d in dateien if stichwort in d["name"].casefold()] or dateien
+        return {**werte, "vorlage": f"google:{passende[0]['id']}"}
+    return werte
+
+
+def _google_block(kontext: object) -> str:
+    quelle = _google(kontext)
+    if quelle is None:
+        return ""
+    return (
+        "<h2>Google</h2>"
+        f"<p>{escape(quelle.status())}</p>"
+        '<form method="post" action="/google"><p>'
+        '<button type="submit">Mit Google verbinden</button></p></form>'
+    )
+
+
 def _html(status: int, inhalt: str) -> tuple[int, dict[str, str], bytes]:
     return status, {"Content-Type": _HTML_TYP}, inhalt.encode("utf-8")
 
@@ -190,24 +236,27 @@ def _get_seite(kontext: object, pfad: str) -> tuple[int, dict[str, str], bytes]:
     vorlagen = _lese_vorlagen(einstellungen)
     hinweise = _vorlagen_hinweise(einstellungen, vorlagen)
     home = _home(kontext)
+    google = _mit_google(kontext, vorlagen, hinweise)
 
     if pfad == "/mietvertrag":
         letzte = lade_auswahl(auswahl_pfad(einstellungen, home))
-        werte = vorauswahl("vertrag", objekte, vorlagen, letzte)
+        werte = _google_vorwahl(
+            vorauswahl("vertrag", objekte, vorlagen, letzte), letzte, "vertrag", google
+        )
         return _seite("mietvertrag", formular_vertrag(objekte, vorlagen, werte, "", hinweise))
     if pfad == "/protokoll":
         letzte = lade_auswahl(auswahl_pfad(einstellungen, home))
-        werte = vorauswahl("protokoll", objekte, vorlagen, letzte)
+        werte = _google_vorwahl(
+            vorauswahl("protokoll", objekte, vorlagen, letzte), letzte, "protokoll", google
+        )
         return _seite("protokoll", formular_uebergabe(objekte, vorlagen, werte, "", hinweise))
     if pfad == "/objekte":
         return _seite("objekte", formular_objekttabelle(objekte))
 
-    return _seite(
-        "settings",
-        formular_ordner(
-            drive_ordner(einstellungen, _drive_kandidaten(kontext)),
-            lokaler_ordner(einstellungen, home),
-        ),
+    return _settings_seite(
+        drive_ordner(einstellungen, _drive_kandidaten(kontext)),
+        lokaler_ordner(einstellungen, home),
+        kontext=kontext,
     )
 
 
@@ -222,10 +271,18 @@ def _auftrag_seite(
     objekte = _lese_objekte(einstellungen)
     vorlagen = _lese_vorlagen(einstellungen)
     hinweise = _vorlagen_hinweise(einstellungen, vorlagen)
+    _mit_google(kontext, vorlagen, hinweise)
 
     try:
         erstellen = erstelle_protokoll if protokoll else erstelle_vertrag
-        auftrag = erstellen(form, {"einstellungen": einstellungen})
+        auftrags_kontext: dict = {"einstellungen": einstellungen}
+        vorlage = form.get("vorlage", "")
+        if isinstance(vorlage, str) and vorlage.strip().startswith("google:"):
+            quelle = _google(kontext)
+            if quelle is None:
+                raise ValueError("Feld 'vorlage': Google ist nicht aktiviert")
+            auftrags_kontext["vorlage_bytes"] = quelle.hole(vorlage.strip().removeprefix("google:"))
+        auftrag = erstellen(form, auftrags_kontext)
     except (OSError, TypeError, ValueError) as fehler:
         meldung = str(fehler) or "Auftrag konnte nicht erstellt werden"
         if protokoll:
@@ -258,8 +315,10 @@ def _settings_seite(
     lokal: str,
     meldung: str = "",
     status: int = 200,
+    kontext: object = None,
 ) -> tuple[int, dict[str, str], bytes]:
-    return _html(status, rahmen_einfach("settings", formular_ordner(drive, lokal, meldung)))
+    inhalt = formular_ordner(drive, lokal, meldung) + _google_block(kontext)
+    return _html(status, rahmen_einfach("settings", inhalt))
 
 
 def _settings_speichern(form: dict[str, str], kontext: object) -> tuple[int, dict[str, str], bytes]:
@@ -272,7 +331,7 @@ def _settings_speichern(form: dict[str, str], kontext: object) -> tuple[int, dic
         speichere_einstellungen(datei, neue_einstellungen)
     except (OSError, TypeError, ValueError) as fehler:
         meldung = str(fehler) or "Einstellungen konnten nicht gespeichert werden"
-        return _settings_seite(drive, lokal, meldung, 400)
+        return _settings_seite(drive, lokal, meldung, 400, kontext)
 
     try:
         lege_ordner_an(neue_einstellungen)
@@ -285,6 +344,7 @@ def _settings_speichern(form: dict[str, str], kontext: object) -> tuple[int, dic
         neue_einstellungen.get("drive_wurzel", drive),
         lokaler_ordner(neue_einstellungen, _home(kontext)),
         meldung,
+        kontext=kontext,
     )
 
 
@@ -325,6 +385,19 @@ def _beantworte(
         if methode != "GET":
             return _fehler(405, "Methode nicht erlaubt")
         return 302, {"Location": "/mietvertrag"}, b""
+
+    if pfad == "/google":
+        quelle = _google(kontext)
+        if methode != "POST" or quelle is None:
+            return _fehler(405 if quelle is not None else 404, "Seite nicht gefunden")
+        meldung = quelle.verbinden()
+        einstellungen = _lese_einstellungen(kontext)
+        return _settings_seite(
+            drive_ordner(einstellungen, _drive_kandidaten(kontext)),
+            lokaler_ordner(einstellungen, _home(kontext)),
+            meldung,
+            kontext=kontext,
+        )
 
     if pfad in _SEITEN:
         if methode == "GET":

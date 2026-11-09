@@ -20,7 +20,11 @@ _STIL = (
     "nav a[aria-current]{background:#fff;border-bottom:1px solid #fff;font-weight:bold}"
     ".hinweis{color:#8a4b00;margin:.3em 0}"
 )
-_VORLAGEN_ORTE = (("lokal", "Festplatte"), ("drive", "Google Drive"))
+_VORLAGEN_ORTE = (
+    ("lokal", "Festplatte"),
+    ("drive", "Google Drive"),
+    ("google", "Google Docs / Drive (online)"),
+)
 _FORMATE = (("docx+pdf", "Word + PDF"), ("docx", "Word"), ("pdf", "PDF"))
 _ZIELE = (("drive", "Google Drive"), ("lokal", "Lokaler Ordner"))
 _ARTEN = (("Einzug", "Einzug"), ("Auszug", "Auszug"))
@@ -107,7 +111,14 @@ def _vorlagen_auswahl(
         namen = _listenwert(vorlagen.get(ort, []), f"vorlagen.{ort}")
         if not namen:
             continue
-        optionen = "".join(_option(f"{ort}:{name}", name, auswahl) for name in namen)
+        if ort == "google":
+            optionen = "".join(
+                _option(f"google:{datei.get('id', '')}", datei.get("name", ""), auswahl)
+                for datei in namen
+                if isinstance(datei, dict)
+            )
+        else:
+            optionen = "".join(_option(f"{ort}:{name}", name, auswahl) for name in namen)
         gruppen.append(f'<optgroup label="{_maskiert(beschriftung)}">{optionen}</optgroup>')
     meldungen = "".join(f'<p class="hinweis">{_maskiert(text)}</p>' for text in hinweise or [])
     return _zeile(

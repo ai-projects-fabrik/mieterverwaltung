@@ -357,3 +357,30 @@ def test_protokoll_pdf_und_platzhalterfehler(umgebung):
     with pytest.raises(ValueError, match="bemerkungen"):
         erstelle_protokoll(form, umgebung)
     assert namen(umgebung, "al") == []
+
+
+def test_google_vorlage_kommt_aus_dem_kontext_und_nichts_wird_lokal_gelesen(umgebung):
+    form = vertragsform()
+    form["vorlage"] = "google:abc123"
+    kontext = {**umgebung, "vorlage_bytes": docx_bytes(VERTRAG)}
+    ergebnis = erstelle_vertrag(form, kontext)
+    assert ergebnis["dateien"] == ["vertrag-anna-muster.docx"]
+    assert absaetze(umgebung["ordner"]["al"] / "vertrag-anna-muster.docx")[1] == "Anna Muster"
+
+    form = protokollform()
+    form["vorlage"] = "google:abc123"
+    kontext = {**umgebung, "vorlage_bytes": docx_bytes(PROTOKOLL)}
+    assert erstelle_protokoll(form, kontext)["dateien"] == ["uebergabeprotokoll-anna-muster.docx"]
+
+
+def test_google_vorlage_ohne_geladene_bytes_ist_ein_fehler_und_schreibt_nichts(umgebung):
+    form = vertragsform()
+    form["vorlage"] = "google:abc123"
+    for kontext in (
+        umgebung,
+        {**umgebung, "vorlage_bytes": b""},
+        {**umgebung, "vorlage_bytes": "x"},
+    ):
+        with pytest.raises(ValueError, match="vorlage"):
+            erstelle_vertrag(form, kontext)
+    assert keine_dateien(umgebung)

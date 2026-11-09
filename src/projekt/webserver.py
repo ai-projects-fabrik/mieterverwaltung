@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import NoReturn
 
 from projekt.einstellungen import einstellungen_pfad
+from projekt.googlehttp import GoogleQuelle
 from projekt.webapp_einfach import antwort
 
 _MAX_KOERPER = 1024 * 1024
@@ -195,7 +196,7 @@ def main(argv: list[str] | None = None) -> int:
         print("Selbsttest OK")
         return 0
 
-    kontext = {"einstellungen_datei": Path(args.einstellungen)}
+    kontext = {"einstellungen_datei": Path(args.einstellungen), "google": GoogleQuelle()}
     try:
         server = starte(kontext, host="127.0.0.1", port=args.port)
     except (OSError, ValueError) as fehler:
