@@ -271,3 +271,78 @@ def test_fehlerseite_nach_fehlgeschlagenem_auftrag_zeigt_ebenfalls_den_hinweis(k
     )
     assert status == 400
     assert "Keine Vorlage (.docx) gefunden in" in seite((status, {}, koerper))
+
+
+class FakeGoogle:
+    def __init__(self, dateien=None, hinweise=None):
+        self.dateien = dateien if dateien is not None else []
+        self.hinweise = hinweise or []
+        self.geholt = []
+        self.verbunden = 0
+
+    def vorlagen(self):
+        return self.dateien, self.hinweise
+
+    def hole(self, kennung):
+        self.geholt.append(kennung)
+        return docx_bytes(VERTRAG)
+
+    def verbinden(self):
+        self.verbunden += 1
+        return "Anmeldung im Browser gestartet."
+
+    def status(self):
+        return "Nicht mit Google verbunden."
+
+
+GOOGLE_DATEI = {"id": "g1", "name": "Feltenbummler Vertrag", "mime": "x", "eigene": False}
+
+
+def test_google_vorlagen_erscheinen_als_eigene_gruppe_und_sind_vorgewaehlt(kontext, tmp_path):
+    for name in ("vertrag.docx", "uebergabe.docx"):
+        (tmp_path / "vl" / name).unlink()
+    kontext["google"] = FakeGoogle([GOOGLE_DATEI])
+    text = seite(antwort("GET", "/mietvertrag", {}, b"", kontext))
+    assert 'label="Google Docs / Drive (online)"' in text
+    assert '<option value="google:g1" selected>Feltenbummler Vertrag</option>' in text
+
+
+def test_google_hinweise_erscheinen_unter_dem_dropdown(kontext):
+    kontext["google"] = FakeGoogle([], ["Google-Zugangsdatei google-client.json fehlt: X"])
+    text = seite(antwort("GET", "/mietvertrag", {}, b"", kontext))
+    assert "google-client.json fehlt: X" in text
+    assert "online" not in text
+
+
+def test_vertrag_aus_google_vorlage_wird_im_speicher_geholt(kontext, tmp_path):
+    google = FakeGoogle([GOOGLE_DATEI])
+    kontext["google"] = google
+    felder = vertragsfelder(vorlage="google:g1", format="docx", ziel="lokal")
+    status, _, koerper = post(kontext, "/mietvertrag", felder)
+    assert status == 200, koerper
+    assert google.geholt == ["g1"]
+    assert [p.name for p in (tmp_path / "al").iterdir()] == ["vertrag-erika-muster.docx"]
+    assert list((tmp_path / "vd").iterdir()) == []
+
+
+def test_google_vorlage_ohne_aktive_quelle_ist_ein_fehler(kontext):
+    felder = vertragsfelder(vorlage="google:g1", format="docx", ziel="lokal")
+    status, _, koerper = post(kontext, "/mietvertrag", felder)
+    assert status == 400 and "Google ist nicht aktiviert" in seite((status, {}, koerper))
+
+
+def test_settings_zeigt_google_knopf_und_post_google_startet_anmeldung(kontext):
+    google = FakeGoogle()
+    kontext["google"] = google
+    text = seite(antwort("GET", "/settings", {}, b"", kontext))
+    assert 'action="/google"' in text and "Mit Google verbinden" in text
+    assert "Nicht mit Google verbunden." in text
+    status, _, koerper = antwort("POST", "/google", FORM, b"", kontext)
+    assert status == 200 and google.verbunden == 1
+    assert "Anmeldung im Browser gestartet." in seite((status, {}, koerper))
+    assert antwort("GET", "/google", {}, b"", kontext)[0] == 405
+
+
+def test_ohne_google_quelle_gibt_es_keinen_google_teil(kontext):
+    assert "Mit Google verbinden" not in seite(antwort("GET", "/settings", {}, b"", kontext))
+    assert antwort("POST", "/google", FORM, b"", kontext)[0] == 404

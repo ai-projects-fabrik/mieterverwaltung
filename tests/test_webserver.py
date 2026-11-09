@@ -9,6 +9,7 @@ from pathlib import Path
 import pytest
 
 import projekt.webserver as webserver
+from projekt.googlehttp import GoogleQuelle
 from projekt.webserver import main, starte
 
 LIMIT = 1024 * 1024
@@ -230,6 +231,7 @@ def test_main_startet_mit_einstellungen_und_beendet_bei_strg_c(monkeypatch, tmp_
     monkeypatch.setattr(webserver, "starte", fake_starte)
     einstellungen = tmp_path / "einstellungen.json"
     assert main(["--port", "0", "--einstellungen", str(einstellungen)]) == 0
+    assert isinstance(aufruf["kontext"].pop("google"), GoogleQuelle)
     assert aufruf == {
         "kontext": {"einstellungen_datei": einstellungen},
         "host": "127.0.0.1",
@@ -257,6 +259,7 @@ def test_main_gibt_host_explizit_an(monkeypatch, tmp_path):
 
     monkeypatch.setattr(webserver, "starte", fake_starte)
     assert main(["--port", "0", "--einstellungen", str(tmp_path / "e.json")]) == 0
+    assert isinstance(aufruf["kontext"].pop("google"), GoogleQuelle)
     assert aufruf == {
         "kontext": {"einstellungen_datei": tmp_path / "e.json"},
         "host": "127.0.0.1",

@@ -304,3 +304,11 @@ def test_menue_ist_tab_leiste_mit_abstand_und_hervorhebung():
     assert "<style>" in seite and "nav a{" in seite and "padding" in seite
     assert "nav a[aria-current]{" in seite
     assert seite.count('aria-current="page"') == 1
+
+
+def test_google_gruppe_zeigt_dateinamen_mit_id_als_wert():
+    vorlagen = {"google": [{"id": "g<1>", "name": "Mein Vertrag & Co"}, "kaputt"]}
+    html = formular_vertrag(OBJEKTE, vorlagen, {"vorlage": "google:g<1>"})
+    assert 'label="Google Docs / Drive (online)"' in html
+    assert '<option value="google:g&lt;1&gt;" selected>Mein Vertrag &amp; Co</option>' in html
+    assert "kaputt" not in html

@@ -150,6 +150,17 @@ def _pdf_eingang(einstellungen: dict) -> Path:
     return pfad
 
 
+def _google_vorlage(form: dict[str, str], kontext: dict) -> bytes | None:
+    """Bytes einer Google-Vorlage (``google:<id>``), vom Aufrufer im Kontext bereitgestellt."""
+
+    if not _textwert(form, "vorlage").startswith("google:"):
+        return None
+    daten = kontext.get("vorlage_bytes")
+    if not isinstance(daten, bytes) or not daten:
+        raise ValueError("Feld 'vorlage': Die Google-Vorlage wurde nicht geladen")
+    return daten
+
+
 def _lese_vorlage(einstellungen: dict, ort: str, name: str) -> bytes:
     return lese_vorlage(_vorlagenordner(einstellungen, ort), name)
 
@@ -218,7 +229,8 @@ def erstelle_vertrag(form: dict[str, str], kontext: dict) -> dict:
     form = _pruefe_form(form)
     einstellungen = _pruefe_kontext(kontext)
     objekt_id = _objekt_id(form)
-    ort, vorlagenname = _vorlage(form)
+    google = _google_vorlage(form, kontext)
+    ort, vorlagenname = ("", "") if google is not None else _vorlage(form)
     format_ = _format(form)
     ziel = _ziel(form)
 
@@ -234,7 +246,7 @@ def erstelle_vertrag(form: dict[str, str], kontext: dict) -> dict:
         neu.update(aenderungen_aus_text(anfrage))
     aenderungsbericht = bericht(alt, neu)
 
-    vorlage = _lese_vorlage(einstellungen, ort, vorlagenname)
+    vorlage = google if google is not None else _lese_vorlage(einstellungen, ort, vorlagenname)
     inhalt = _fuelle_vorlage(vorlage, neu)
     dateiname = f"vertrag-{slug(neu.get('mieter_name', ''))}.docx"
     return {
@@ -254,7 +266,8 @@ def erstelle_protokoll(form: dict[str, str], kontext: dict) -> dict:
     form = _pruefe_form(form)
     einstellungen = _pruefe_kontext(kontext)
     objekt_id = _objekt_id(form)
-    ort, vorlagenname = _vorlage(form)
+    google = _google_vorlage(form, kontext)
+    ort, vorlagenname = ("", "") if google is not None else _vorlage(form)
     format_ = _format(form)
     ziel = _ziel(form)
 
@@ -266,7 +279,7 @@ def erstelle_protokoll(form: dict[str, str], kontext: dict) -> dict:
     bestand.update(_formularfelder(form, PROTOKOLL_FELDER))
     werte = normalisiere_protokoll(bestand)
 
-    vorlage = _lese_vorlage(einstellungen, ort, vorlagenname)
+    vorlage = google if google is not None else _lese_vorlage(einstellungen, ort, vorlagenname)
     inhalt = _fuelle_vorlage(vorlage, werte)
     dateiname = f"uebergabeprotokoll-{slug(werte.get('mieter_name', ''))}.docx"
     return _schreibe_auftrag(inhalt, dateiname, format_, ziel, einstellungen)
