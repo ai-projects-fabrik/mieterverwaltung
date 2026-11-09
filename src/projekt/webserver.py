@@ -1,4 +1,4 @@
-"""Lokaler HTTP-Server um die socketfreie Weboberflaeche aus :mod:`projekt.webapp`."""
+"""Lokaler HTTP-Server um die socketfreie Weboberflaeche aus :mod:`projekt.webapp_einfach`."""
 
 from __future__ import annotations
 
@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import NoReturn
 
 from projekt.einstellungen import einstellungen_pfad
-from projekt.webapp import antwort
+from projekt.webapp_einfach import antwort
 
 _MAX_KOERPER = 1024 * 1024
 _HTML_TYP = "text/html; charset=utf-8"
@@ -29,7 +29,7 @@ class _Parser(argparse.ArgumentParser):
 
 
 class _Handler(BaseHTTPRequestHandler):
-    """Reicht Anfragen an :func:`projekt.webapp.antwort` weiter."""
+    """Reicht Anfragen an :func:`projekt.webapp_einfach.antwort` weiter."""
 
     def __init__(self, *args: object, kontext: dict, **kwargs: object) -> None:
         self._kontext = kontext

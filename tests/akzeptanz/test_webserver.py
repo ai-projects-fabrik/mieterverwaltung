@@ -37,8 +37,16 @@ def laufend(tmp_path):
         (tmp_path / name).mkdir()
     (tmp_path / "vl" / "vertrag.docx").write_bytes(docx_bytes())
     datei = tmp_path / "einstellungen.json"
+    objekte = tmp_path / "objekte.json"
+    objekte.write_text(json.dumps([{"id": "a", "bezeichnung": "Haus A"}]), encoding="utf-8")
     datei.write_text(
-        json.dumps({"vorlagen_lokal": str(tmp_path / "vl"), "ausgabe_lokal": str(tmp_path / "al")}),
+        json.dumps(
+            {
+                "vorlagen_lokal": str(tmp_path / "vl"),
+                "ausgabe_lokal": str(tmp_path / "al"),
+                "objekte_datei": str(objekte),
+            }
+        ),
         encoding="utf-8",
     )
     server = starte({"einstellungen_datei": datei}, port=0)
@@ -98,10 +106,14 @@ def test_vertrag_ueber_http(laufend):
 
 def test_settings_ueber_http(laufend):
     url, ordner = laufend
-    status, _ = anfrage(url + "/settings", {"ausgabe_lokal": str(ordner / "al")})
+    status, _ = anfrage(
+        url + "/settings",
+        {"drive_ordner": str(ordner / "drive"), "lokaler_ordner": str(ordner / "lokal")},
+    )
     assert status == 200
     gespeichert = json.loads((ordner / "einstellungen.json").read_text(encoding="utf-8"))
-    assert gespeichert == {"ausgabe_lokal": str(ordner / "al")}
+    assert gespeichert["drive_wurzel"] == str(ordner / "drive")
+    assert gespeichert["ausgabe_lokal"] == str(ordner / "lokal" / "Ausgabe")
 
 
 def test_aufruf_selbsttest_und_fehler(capsys):
