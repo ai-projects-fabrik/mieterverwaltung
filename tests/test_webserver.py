@@ -71,7 +71,7 @@ def test_get_und_post_sowie_content_length(server):
         server,
         "POST",
         "/settings",
-        b"ausgabe_lokal=/tmp/ausgabe",
+        b"drive_ordner=/tmp/drive&lokaler_ordner=/tmp/lokal",
         {"Content-Type": "application/x-www-form-urlencoded"},
     )
     assert status == 200
