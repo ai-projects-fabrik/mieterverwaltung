@@ -119,14 +119,19 @@ def laeuft_gerade(laeufe):
 
 
 def haengt(pr, checks, kommentare, jetzt):
-    """True, wenn ein offener Agenten-PR trotz gruener Pflichtchecks BLOCKED ist und noch nicht angestossen wurde."""
+    """True, wenn ein offener Agenten-PR haengt und noch nicht angestossen wurde.
+
+    Haengt heisst: keine Check-Runs auf dem Head (CI lief nicht oder brach ohne Job ab) oder BLOCKED
+    trotz gruener Pflichtchecks. Beides erst nach HAENGT_NACH.
+    """
     if pr.get("state") != "open" or pr.get("draft") or (pr.get("user") or {}).get("type") != "Bot":
         return False
-    if pr.get("mergeable_state") != "blocked" or jetzt - zeit(pr["updated_at"]) < HAENGT_NACH:
+    if jetzt - zeit(pr["updated_at"]) < HAENGT_NACH:
         return False
-    gruen = {c["name"] for c in checks if c.get("conclusion") == "success"}
-    if not set(PFLICHT) <= gruen:
-        return False
+    if checks:
+        gruen = {c["name"] for c in checks if c.get("conclusion") == "success"}
+        if pr.get("mergeable_state") != "blocked" or not set(PFLICHT) <= gruen:
+            return False
     marke = f"<!-- neustoss:{pr['head']['sha']} -->"
     return not any(marke in (c.get("body") or "") for c in kommentare)
 
@@ -151,7 +156,9 @@ def stosse_haengende_an(repo, token, jetzt):
         kommentare = seiten(f"repos/{repo}/issues/{nr}/comments?per_page=100")
         if not haengt(pr, checks, kommentare, jetzt):
             continue
-        print(f"PR {nr}: haengt (BLOCKED, Pflichtchecks gruen): schliessen und wieder oeffnen")
+        print(
+            f"PR {nr}: haengt (ohne Check-Runs oder BLOCKED bei gruenen Pflichtchecks): schliessen und wieder oeffnen"
+        )
         gh(
             "pr",
             "comment",
@@ -159,7 +166,7 @@ def stosse_haengende_an(repo, token, jetzt):
             "--repo",
             repo,
             "--body",
-            f"<!-- neustoss:{pr['head']['sha']} -->\nProtokoll: PR haengt trotz gruener Checks (agent-gate nicht gewertet); wird einmal geschlossen und wieder geoeffnet.",
+            f"<!-- neustoss:{pr['head']['sha']} -->\nProtokoll: PR haengt (keine Check-Runs auf dem Head oder agent-gate nicht gewertet); wird einmal geschlossen und wieder geoeffnet.",
         )
         gh("pr", "close", str(nr), "--repo", repo, token=token)
         gh("pr", "reopen", str(nr), "--repo", repo, token=token)
