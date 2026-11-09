@@ -241,3 +241,33 @@ def test_fehler_beim_merken_wird_ignoriert(kontext, monkeypatch):
     monkeypatch.setattr(webapp_einfach, "speichere_auswahl", fehlschlag)
     status, _, koerper = post(kontext, "/mietvertrag", vertragsfelder())
     assert status == 200 and "vertrag-erika-muster.docx" in seite((status, {}, koerper))
+
+
+def test_leerer_vorlagenordner_zeigt_hinweis_und_keine_leere_gruppe(kontext, tmp_path):
+    for pfad in ("/mietvertrag", "/protokoll"):
+        text = seite(antwort("GET", pfad, {}, b"", kontext))
+        assert f"Keine Vorlage (.docx) gefunden in {tmp_path / 'vd'}" in text
+        assert f"gefunden in {tmp_path / 'vl'}" not in text
+        assert 'label="Festplatte"' in text and 'label="Google Drive"' not in text
+        assert "Google-Docs-Dateien" not in text
+
+
+def test_gdoc_im_vorlagenordner_zeigt_speichertipp(kontext, tmp_path):
+    (tmp_path / "vd" / "Vertrag.gdoc").write_text("{}", encoding="utf-8")
+    text = seite(antwort("GET", "/mietvertrag", {}, b"", kontext))
+    assert "Google-Docs-Dateien bitte als .docx speichern" in text
+    assert "Datei > Herunterladen > Microsoft Word" in text
+
+
+def test_fehlender_vorlagenordner_zeigt_hinweis_mit_pfad(kontext, tmp_path):
+    (tmp_path / "vd").rmdir()
+    text = seite(antwort("GET", "/mietvertrag", {}, b"", kontext))
+    assert f"Keine Vorlage (.docx) gefunden in {tmp_path / 'vd'}" in text
+
+
+def test_fehlerseite_nach_fehlgeschlagenem_auftrag_zeigt_ebenfalls_den_hinweis(kontext, tmp_path):
+    status, _, koerper = post(
+        kontext, "/mietvertrag", {"vorlage": "lokal:fehlt.docx", "mieter_name": "A"}
+    )
+    assert status == 400
+    assert "Keine Vorlage (.docx) gefunden in" in seite((status, {}, koerper))

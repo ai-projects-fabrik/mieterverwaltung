@@ -287,3 +287,20 @@ def test_uebergabeformular_ohne_objekte_zeigt_nur_hinweis():
     assert formular.formulare == []
     assert "Fehler &lt;x&gt;" in html
     assert "Objekte" in " ".join(formular.texte)
+
+
+def test_vorlagen_hinweise_erscheinen_maskiert_und_leere_gruppen_entfallen():
+    html = formular_vertrag(
+        OBJEKTE, {"lokal": ["A.docx"], "drive": []}, None, "", ["Keine Vorlage in <G:/x> & Co"]
+    )
+    assert 'label="Festplatte"' in html and 'label="Google Drive"' not in html
+    assert '<p class="hinweis">Keine Vorlage in &lt;G:/x&gt; &amp; Co</p>' in html
+    assert "optgroup" not in formular_uebergabe(OBJEKTE, {}, None, "", ["x"])
+    assert 'class="hinweis"' not in formular_vertrag(OBJEKTE, VORLAGEN)
+
+
+def test_menue_ist_tab_leiste_mit_abstand_und_hervorhebung():
+    seite = rahmen_einfach("protokoll", "")
+    assert "<style>" in seite and "nav a{" in seite and "padding" in seite
+    assert "nav a[aria-current]{" in seite
+    assert seite.count('aria-current="page"') == 1

@@ -13,6 +13,13 @@ TABS_EINFACH: tuple[tuple[str, str], ...] = (
     ("settings", "Einstellungen"),
 )
 
+_STIL = (
+    "nav{border-bottom:1px solid #ccc;margin-bottom:1em}"
+    "nav a{display:inline-block;margin:0 .25em -1px 0;padding:.5em 1.2em;border:1px solid #ccc;"
+    "border-radius:.4em .4em 0 0;background:#f3f3f3;color:#333;text-decoration:none}"
+    "nav a[aria-current]{background:#fff;border-bottom:1px solid #fff;font-weight:bold}"
+    ".hinweis{color:#8a4b00;margin:.3em 0}"
+)
 _VORLAGEN_ORTE = (("lokal", "Festplatte"), ("drive", "Google Drive"))
 _FORMATE = (("docx+pdf", "Word + PDF"), ("docx", "Word"), ("pdf", "PDF"))
 _ZIELE = (("drive", "Google Drive"), ("lokal", "Lokaler Ordner"))
@@ -88,7 +95,9 @@ def _listenwert(wert: object, feld: str) -> list:
     return wert
 
 
-def _vorlagen_auswahl(vorlagen: dict[str, list[str]], gewaehlt: object) -> str:
+def _vorlagen_auswahl(
+    vorlagen: dict[str, list[str]], gewaehlt: object, hinweise: list[str] | None = None
+) -> str:
     if not isinstance(vorlagen, dict):
         raise ValueError("Feld 'vorlagen' muss ein dict sein")
 
@@ -96,12 +105,15 @@ def _vorlagen_auswahl(vorlagen: dict[str, list[str]], gewaehlt: object) -> str:
     gruppen = []
     for ort, beschriftung in _VORLAGEN_ORTE:
         namen = _listenwert(vorlagen.get(ort, []), f"vorlagen.{ort}")
+        if not namen:
+            continue
         optionen = "".join(_option(f"{ort}:{name}", name, auswahl) for name in namen)
         gruppen.append(f'<optgroup label="{_maskiert(beschriftung)}">{optionen}</optgroup>')
+    meldungen = "".join(f'<p class="hinweis">{_maskiert(text)}</p>' for text in hinweise or [])
     return _zeile(
         "vorlage",
         "Vorlage",
-        '<select id="vorlage" name="vorlage">' + "".join(gruppen) + "</select>",
+        '<select id="vorlage" name="vorlage">' + "".join(gruppen) + "</select>" + meldungen,
     )
 
 
@@ -144,7 +156,7 @@ def rahmen_einfach(aktiv: str, inhalt: str) -> str:
         links.append(f'<a href="/{tab}"{aktuell}>{escape(beschriftung)}</a>')
     return (
         '<!doctype html><html lang="de"><head><meta charset="utf-8">'
-        "<title>Mietverwaltung</title></head><body>"
+        f"<title>Mietverwaltung</title><style>{_STIL}</style></head><body>"
         f"<nav>{''.join(links)}</nav><main>{inhalt}</main></body></html>"
     )
 
@@ -222,6 +234,7 @@ def _basisformular(
     vorlagen: dict[str, list[str]],
     werte: dict[str, str] | None,
     meldung: str,
+    hinweise: list[str] | None = None,
 ) -> tuple[str, dict[str, str], str, str] | None:
     daten = _werte(werte)
     if not isinstance(objekte, list):
@@ -235,7 +248,7 @@ def _basisformular(
         _meldung(meldung)
         + f'<form method="post" action="/{post}"><table>'
         + _objekt_auswahl(objekte, daten.get("objekt_id", ""))
-        + _vorlagen_auswahl(vorlagen, daten.get("vorlage", ""))
+        + _vorlagen_auswahl(vorlagen, daten.get("vorlage", ""), hinweise)
         + _eingabe(
             "mieter_name",
             "Name der Mieterin / des Mieters",
@@ -256,8 +269,9 @@ def _formular_vertrag(
     vorlagen: dict[str, list[str]],
     werte: dict[str, str] | None,
     meldung: str,
+    hinweise: list[str] | None = None,
 ) -> str:
-    basis = _basisformular("mietvertrag", objekte, vorlagen, werte, meldung)
+    basis = _basisformular("mietvertrag", objekte, vorlagen, werte, meldung, hinweise)
     if basis is None:
         return _ohne_objekte(meldung)
 
@@ -276,16 +290,19 @@ def formular_vertrag(
     vorlagen: dict[str, list[str]],
     werte: dict[str, str] | None = None,
     meldung: str = "",
+    vorlagen_hinweise: list[str] | None = None,
 ) -> str:
     """Erzeugt das maskierte Mietvertragsformular mit den noetigen Feldern.
 
     Betraege stammen aus dem gewaehlten Objekt und erscheinen deshalb nicht im
     Formular. ``werte`` belegt Eingaben und Auswahlen vor; ungültige Werte fuer
-    Format und Ziel fallen auf ``docx+pdf`` und ``drive`` zurueck. Ohne Objekte
+    Format und Ziel fallen auf ``docx+pdf`` und ``drive`` zurueck.
+    ``vorlagen_hinweise`` erscheinen als Texte unter dem Vorlagen-Dropdown;
+    leere Vorlagengruppen werden nicht angezeigt. Ohne Objekte
     entsteht statt des Formulars nur ein Hinweis.
     """
 
-    return _formular_vertrag(objekte, vorlagen, werte, meldung)
+    return _formular_vertrag(objekte, vorlagen, werte, meldung, vorlagen_hinweise)
 
 
 def _formular_uebergabe(
@@ -293,8 +310,9 @@ def _formular_uebergabe(
     vorlagen: dict[str, list[str]],
     werte: dict[str, str] | None,
     meldung: str,
+    hinweise: list[str] | None = None,
 ) -> str:
-    basis = _basisformular("protokoll", objekte, vorlagen, werte, meldung)
+    basis = _basisformular("protokoll", objekte, vorlagen, werte, meldung, hinweise)
     if basis is None:
         return _ohne_objekte(meldung)
 
@@ -318,6 +336,7 @@ def formular_uebergabe(
     vorlagen: dict[str, list[str]],
     werte: dict[str, str] | None = None,
     meldung: str = "",
+    vorlagen_hinweise: list[str] | None = None,
 ) -> str:
     """Erzeugt das maskierte Formular fuer das Uebergabeprotokoll.
 
@@ -326,4 +345,4 @@ def formular_uebergabe(
     des Formulars nur ein Hinweis.
     """
 
-    return _formular_uebergabe(objekte, vorlagen, werte, meldung)
+    return _formular_uebergabe(objekte, vorlagen, werte, meldung, vorlagen_hinweise)
