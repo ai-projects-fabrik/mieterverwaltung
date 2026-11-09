@@ -173,7 +173,18 @@ def test_quelle_ohne_client_datei_zeigt_klaren_hinweis(tmp_path):
     assert "fehlt" in quelle(tmp_path).verbinden()
 
 
-def test_quelle_oeffnet_browser_beim_ersten_zugriff_einmal(tmp_path):
+def test_quelle_startet_die_anmeldung_nie_von_selbst(tmp_path):
+    client_pfad(tmp_path).parent.mkdir(parents=True)
+    client_pfad(tmp_path).write_text(CLIENT_JSON, encoding="utf-8")
+    geoeffnet = []
+    q = quelle(tmp_path, Fake(), geoeffnet.append)
+    for _ in range(2):
+        dateien, hinweise = q.vorlagen()
+        assert dateien == [] and "Nicht mit Google verbunden" in hinweise[0]
+    assert geoeffnet == [] and not lade_token(token_pfad(tmp_path))
+
+
+def test_quelle_anmeldung_per_knopf_und_danach_liste(tmp_path):
     client_pfad(tmp_path).parent.mkdir(parents=True)
     client_pfad(tmp_path).write_text(CLIENT_JSON, encoding="utf-8")
     transport = Fake(
@@ -183,12 +194,21 @@ def test_quelle_oeffnet_browser_beim_ersten_zugriff_einmal(tmp_path):
         }
     )
     q = quelle(tmp_path, transport, browser())
-    dateien, hinweise = q.vorlagen()
-    assert dateien == []
+    assert "gestartet" in q.verbinden()
     assert lade_token(token_pfad(tmp_path))["refresh_token"] == "r1"
     assert "verbunden" in q.status()
     dateien, hinweise = q.vorlagen()
     assert [d["id"] for d in dateien] == ["1"] and hinweise == []
+
+
+def test_quelle_zeitueberschreitung_ist_eine_verstaendliche_meldung(tmp_path):
+    client_pfad(tmp_path).parent.mkdir(parents=True)
+    client_pfad(tmp_path).write_text(CLIENT_JSON, encoding="utf-8")
+    q = quelle(tmp_path, wartezeit=0.2)
+    assert q.verbinden() == "Anmeldung abgebrochen - erneut versuchen"
+    dateien, hinweise = q.vorlagen()
+    assert "Anmeldung abgebrochen - erneut versuchen" in hinweise[0]
+    assert "nicht rechtzeitig" not in hinweise[0]
 
 
 def test_quelle_cache_und_hole(tmp_path):

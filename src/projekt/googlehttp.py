@@ -197,6 +197,7 @@ class GoogleQuelle:
         stichworte: tuple[str, ...] = STICHWORTE,
         cache_sekunden: float = 60,
         im_hintergrund: bool = True,
+        wartezeit: float = _ANMELDE_WARTEZEIT,
     ) -> None:
         self._home = home
         self._transport = transport
@@ -205,10 +206,10 @@ class GoogleQuelle:
         self._stichworte = stichworte
         self._cache_sekunden = cache_sekunden
         self._im_hintergrund = im_hintergrund
+        self._wartezeit = wartezeit
         self._sperre = threading.Lock()
         self._cache: tuple[float, list[dict]] | None = None
         self._anmeldung: threading.Thread | None = None
-        self._versucht = False
         self._anmelde_fehler = ""
 
     def _angemeldet(self) -> bool:
@@ -217,12 +218,19 @@ class GoogleQuelle:
     def _anmelde_lauf(self, client: dict) -> None:
         try:
             token = anmelden(
-                client, transport=self._transport, oeffne=self._oeffne, jetzt=self._jetzt
+                client,
+                transport=self._transport,
+                oeffne=self._oeffne,
+                jetzt=self._jetzt,
+                wartezeit=self._wartezeit,
             )
             speichere_token(token_pfad(self._home), token)
             self._anmelde_fehler = ""
         except (OSError, ValueError) as fehler:
-            self._anmelde_fehler = str(fehler)
+            nicht_fertig = "nicht rechtzeitig" in str(fehler)
+            self._anmelde_fehler = (
+                "Anmeldung abgebrochen - erneut versuchen" if nicht_fertig else str(fehler)
+            )
 
     def verbinden(self) -> str:
         """Startet die Anmeldung im Browser (nicht blockierend) und liefert eine Meldung."""
@@ -234,7 +242,6 @@ class GoogleQuelle:
         with self._sperre:
             if self._anmeldung is not None and self._anmeldung.is_alive():
                 return "Die Anmeldung im Browser laeuft bereits."
-            self._versucht = True
             self._anmelde_fehler = ""
             if self._im_hintergrund:
                 self._anmeldung = threading.Thread(
@@ -272,16 +279,14 @@ class GoogleQuelle:
             ]
         if not self._angemeldet():
             laeuft = self._anmeldung is not None and self._anmeldung.is_alive()
-            if self._anmelde_fehler:
-                return [], [f"Google-Anmeldung fehlgeschlagen: {self._anmelde_fehler}"]
-            if not laeuft and not self._versucht:
-                self.verbinden()
-                laeuft = True
-            hinweis = (
-                "Google-Anmeldung im Browser gestartet. Bitte dort zustimmen, dann Seite neu laden."
-                if laeuft
-                else "Nicht mit Google verbunden (Einstellungen > Mit Google verbinden)."
-            )
+            if laeuft:
+                hinweis = (
+                    "Google-Anmeldung im Browser laeuft. Bitte dort zustimmen, dann neu laden."
+                )
+            elif self._anmelde_fehler:
+                hinweis = f"{self._anmelde_fehler} (Einstellungen > Mit Google verbinden)"
+            else:
+                hinweis = "Nicht mit Google verbunden (Einstellungen > Mit Google verbinden)."
             return [], [hinweis]
         jetzt = self._jetzt()
         if self._cache is not None and jetzt - self._cache[0] < self._cache_sekunden:
