@@ -112,6 +112,32 @@ def _lese_vorlagen(einstellungen: dict[str, str]) -> dict[str, list[str]]:
     return ergebnis_
 
 
+def _vorlagen_hinweise(einstellungen: dict[str, str], vorlagen: dict[str, list[str]]) -> list[str]:
+    """Hinweise fuer Vorlagen-Ordner ohne .docx, bei .gdoc-Dateien mit Speichertipp."""
+
+    hinweise: list[str] = []
+    gdoc = False
+    for ort in _ORTE:
+        if vorlagen.get(ort):
+            continue
+        try:
+            pfad = Path(ordner(einstellungen, "vorlagen", ort))
+        except (OSError, TypeError, ValueError):
+            continue
+        hinweise.append(f"Keine Vorlage (.docx) gefunden in {pfad}")
+        try:
+            gdoc = gdoc or any(
+                p.name.casefold().endswith((".gdoc", ".gsheet")) for p in pfad.iterdir()
+            )
+        except OSError:
+            pass
+    if gdoc:
+        hinweise.append(
+            "Google-Docs-Dateien bitte als .docx speichern (Datei > Herunterladen > Microsoft Word)"
+        )
+    return hinweise
+
+
 def _html(status: int, inhalt: str) -> tuple[int, dict[str, str], bytes]:
     return status, {"Content-Type": _HTML_TYP}, inhalt.encode("utf-8")
 
@@ -162,16 +188,17 @@ def _get_seite(kontext: object, pfad: str) -> tuple[int, dict[str, str], bytes]:
     einstellungen = _lese_einstellungen(kontext)
     objekte = _lese_objekte(einstellungen)
     vorlagen = _lese_vorlagen(einstellungen)
+    hinweise = _vorlagen_hinweise(einstellungen, vorlagen)
     home = _home(kontext)
 
     if pfad == "/mietvertrag":
         letzte = lade_auswahl(auswahl_pfad(einstellungen, home))
         werte = vorauswahl("vertrag", objekte, vorlagen, letzte)
-        return _seite("mietvertrag", formular_vertrag(objekte, vorlagen, werte))
+        return _seite("mietvertrag", formular_vertrag(objekte, vorlagen, werte, "", hinweise))
     if pfad == "/protokoll":
         letzte = lade_auswahl(auswahl_pfad(einstellungen, home))
         werte = vorauswahl("protokoll", objekte, vorlagen, letzte)
-        return _seite("protokoll", formular_uebergabe(objekte, vorlagen, werte))
+        return _seite("protokoll", formular_uebergabe(objekte, vorlagen, werte, "", hinweise))
     if pfad == "/objekte":
         return _seite("objekte", formular_objekttabelle(objekte))
 
@@ -194,6 +221,7 @@ def _auftrag_seite(
     einstellungen = _lese_einstellungen(kontext)
     objekte = _lese_objekte(einstellungen)
     vorlagen = _lese_vorlagen(einstellungen)
+    hinweise = _vorlagen_hinweise(einstellungen, vorlagen)
 
     try:
         erstellen = erstelle_protokoll if protokoll else erstelle_vertrag
@@ -201,9 +229,9 @@ def _auftrag_seite(
     except (OSError, TypeError, ValueError) as fehler:
         meldung = str(fehler) or "Auftrag konnte nicht erstellt werden"
         if protokoll:
-            inhalt = formular_uebergabe(objekte, vorlagen, form, meldung)
+            inhalt = formular_uebergabe(objekte, vorlagen, form, meldung, hinweise)
         else:
-            inhalt = formular_vertrag(objekte, vorlagen, form, meldung)
+            inhalt = formular_vertrag(objekte, vorlagen, form, meldung, hinweise)
         return _html(400, rahmen_einfach(aktiv, inhalt))
 
     dateien = list(auftrag.get("dateien", []))
