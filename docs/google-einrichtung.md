@@ -26,14 +26,22 @@ Zugang an. Alle Schritte mit dem Konto, dem die Dateien zugaenglich sind (swisss
    **Desktop-App**, Name `Mietverwaltung`, Erstellen, **JSON herunterladen**.
 5. Die Datei speichern als `C:\Users\NEO\.mieterverwaltung\google-client.json` (Ordner anlegen, falls er
    fehlt). Sie liegt nie im Repo.
-6. **Einmal anmelden:** beim ersten Zugriff auf Google (Vorlagenliste oder *Einstellungen > Mit Google
-   verbinden*) oeffnet die App den Browser selbst. Fehlt `google-client.json`, zeigt sie stattdessen einen
-   klaren Hinweis mit dem erwarteten Pfad. Konto waehlen. Erscheint *Google hat diese App nicht ueberprueft*, auf *Erweitert > Weiter zu
-   Mietverwaltung* klicken (die App ist deine eigene). Zugriff *Dateien in Google Drive ansehen* erlauben.
-   Die Seite meldet *Fertig*; der Browser-Tab kann zu.
+6. **Einmal anmelden:** an der Vorlagenwahl (Mietvertrag, Uebergabeprotokoll) auf *Bei Google anmelden*
+   klicken. Die Anmeldung startet nie von selbst. Der Browser oeffnet sich. Konto waehlen. Erscheint *Google
+   hat diese App nicht ueberprueft*, auf *Erweitert > Weiter zu Mietverwaltung* klicken (die App ist deine
+   eigene). Zugriff *Dateien in Google Drive ansehen* erlauben. Die Seite meldet *Fertig*; danach die Seite
+   der App neu laden. Fehlt `google-client.json`, zeigt die App stattdessen einen Hinweis mit dem Pfad. Laeuft
+   die Anmeldung in 3 Minuten nicht durch, steht dort *Anmeldung abgebrochen - erneut versuchen* mit Knopf.
 
 Danach laeuft alles ohne weitere Schritte; das Token liegt in `~/.mieterverwaltung/google-token.json` und
 erneuert sich selbst. Zugriff widerrufen: <https://myaccount.google.com/permissions> (App entfernen).
+
+## Vorlage in Google Drive aussuchen
+
+Nach der Anmeldung steht an der Vorlagenwahl *Verbunden als <Konto>*, *Abmelden* und *Vorlage in Google
+Drive aussuchen*. Diese Seite navigiert durch *Meine Ablage* und *Mit mir geteilt* (Ordner oeffnen, ueber die
+Pfadkrumen zurueck), sucht nach Name und zeigt mit *Alle Dateien anzeigen* alle Google Docs und Word-Dateien.
+Ein Klick auf *Waehlen* merkt die Vorlage fuer das naechste Mal.
 
 ## Welche Dateien erscheinen
 
@@ -48,6 +56,8 @@ Docs und Word-Dateien und filtert selbst.
 |---|---|---|
 | `googleauth.py` | Agent (Gate) | OAuth-Logik ohne Netzwerk, Token-Datei |
 | `gdrive.py` | Agent (Gate) | Drive-Anfragen, Antworten, Auswahl |
+| `gdrivenav.py` | Agent (Gate) | Konto, Datei, Ordnerinhalt, Suche ohne Netzwerk |
+| `seiten_google.py` | Agent (Gate) | Anmelde-Block und Auswahlseite (HTML) |
 | `googlehttp.py` | Mensch (Netzwerk, `urllib.request`, `http.server`) | Transport, Loopback-Anmeldung, Abruf, Test mit Fake-Transport |
 | Einbindung | Mensch | Quelle `google` im Vorlagen-Dropdown (`google:<id>`), Knopf *Mit Google verbinden*, Abruf in `auftraege` |
 
