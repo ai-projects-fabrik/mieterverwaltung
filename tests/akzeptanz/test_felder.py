@@ -43,15 +43,34 @@ UNGUELTIG = [
 ]
 
 
+# Ziel `mv-wohnraumnutzer`: bis das Feld umgesetzt ist, gilt die bisherige Reihenfolge.
+WOHNRAUMNUTZER = "wohnraumnutzer_name" in FELDER
+
+
 def test_felder_reihenfolge_ist_fest():
-    assert FELDER == (
+    erwartet = (
         "mieter_name",
+        "wohnraumnutzer_name",
         "objekt",
         "mietbeginn",
         "miete_netto",
         "nebenkosten",
         "kaution",
     )
+    if not WOHNRAUMNUTZER:
+        erwartet = tuple(f for f in erwartet if f != "wohnraumnutzer_name")
+    assert FELDER == erwartet
+
+
+@pytest.mark.skipif(not WOHNRAUMNUTZER, reason="Feld wohnraumnutzer_name noch nicht umgesetzt")
+def test_wohnraumnutzer_name_ist_ein_pruefter_textfeld():
+    assert normalisiere({"wohnraumnutzer_name": "  Karl Kind "}) == {
+        "wohnraumnutzer_name": "Karl Kind"
+    }
+    assert normalisiere({"mieter_name": "Anna Muster"}) == {"mieter_name": "Anna Muster"}
+    for roh in ("", "   ", "x" * 121, 5, "{{kaution}}", "Weg }} 1"):
+        with pytest.raises(ValueError, match="wohnraumnutzer_name"):
+            normalisiere({"wohnraumnutzer_name": roh})
 
 
 @pytest.mark.parametrize(("eingabe", "erwartet"), GUELTIG)
