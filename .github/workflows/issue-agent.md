@@ -30,6 +30,12 @@ steps:
 tools:
   github:
     toolsets: [issues]
+    # Oeffentliche Repos filtern Issues auf Integritaet 'approved'. Issues des Backlog-Managers
+    # (github-actions[bot], CONTRIBUTOR) waeren sonst fuer den Agenten unsichtbar (mieterverwaltung #77).
+    # Nur dieser eine Autor wird angehoben; min-integrity bleibt approved.
+    min-integrity: approved
+    trusted-users:
+      - "github-actions[bot]"
   edit:
   bash: ["*"]
 safe-outputs:
