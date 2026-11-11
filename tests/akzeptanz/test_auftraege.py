@@ -509,3 +509,18 @@ def test_protokoll_werte_in_reihenfolge_mit_herkunft(kontext):
     assert "werte" not in erstelle_protokoll(protokoll_form(), kontext)
     with pytest.raises(ValueError, match="art"):
         protokoll_werte({**protokoll_form(), "art": "Besichtigung"}, kontext)
+
+
+@ERGEBNIS_WERTE
+def test_vorlage_ohne_platzhalter_ist_fehler_und_schreibt_nichts(kontext):
+    ohne = docx_bytes(["Ausgefuellter Vertrag ohne Platzhalter", "Mieter: Bert Beispiel"])
+    (kontext["ordner"]["vl"] / "ohne.docx").write_bytes(ohne)
+    with pytest.raises(ValueError, match="Vorlage enthaelt keine Platzhalter"):
+        erstelle_vertrag({**basis(), "vorlage": "lokal:ohne.docx"}, kontext)
+    with pytest.raises(ValueError, match="Vorlage enthaelt keine Platzhalter"):
+        erstelle_protokoll({**protokoll_form(), "vorlage": "lokal:ohne.docx"}, kontext)
+    assert leer(kontext)
+    google = {**kontext, "vorlage_bytes": ohne}
+    with pytest.raises(ValueError, match="keine Platzhalter"):
+        erstelle_vertrag({**basis(), "vorlage": "google:abc"}, google)
+    assert leer(kontext)
