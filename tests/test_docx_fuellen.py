@@ -209,3 +209,57 @@ def test_unersetzt_prueft_das_paket_und_meldet_keine_leeren_reste():
     for kaputt in (b"kein zip", b"", None, bytearray(b"zip")):
         with pytest.raises(ValueError):
             unersetzt(kaputt)
+
+
+def _runs(daten: bytes) -> list[list[str]]:
+    """Je Absatz die Folge aus Text, Tabulator (TAB) und Umbruch (BR) in Dokumentreihenfolge."""
+    with zipfile.ZipFile(io.BytesIO(daten)) as paket:
+        wurzel = ET.fromstring(paket.read("word/document.xml"))
+    folge = []
+    for absatz in wurzel.iter(f"{{{W}}}p"):
+        teile = []
+        for element in absatz.iter():
+            if element.tag == f"{{{W}}}t":
+                teile.append(element.text or "")
+            elif element.tag == f"{{{W}}}tab":
+                teile.append("TAB")
+            elif element.tag == f"{{{W}}}br":
+                teile.append("BR")
+        folge.append(teile)
+    return folge
+
+
+def test_fuelle_behaelt_tabulatoren_umbrueche_und_uebrige_runs():
+    xml = (
+        f'<w:document xmlns:w="{W}"><w:body><w:p>'
+        '<w:r><w:t xml:space="preserve">Mieter: </w:t><w:tab/><w:tab/></w:r>'
+        "<w:r><w:t>{{mieter_name}}</w:t></w:r>"
+        "<w:r><w:br/><w:t>Anschrift: </w:t><w:tab/></w:r>"
+        '<w:r><w:rPr><w:b/></w:rPr><w:t xml:space="preserve">Testweg 1</w:t></w:r>'
+        "</w:p></w:body></w:document>"
+    ).encode()
+
+    ergebnis = fuelle(docx(xml), {"mieter_name": "Erika Muster"})
+
+    assert _runs(ergebnis) == [
+        ["Mieter: ", "TAB", "TAB", "Erika Muster", "BR", "Anschrift: ", "TAB", "Testweg 1"]
+    ]
+    with zipfile.ZipFile(io.BytesIO(ergebnis)) as paket:
+        assert b"<w:b" in paket.read("word/document.xml")
+
+
+def test_fuelle_ueber_runs_verteilt_laesst_nachbartext_an_seinem_platz():
+    xml = (
+        f'<w:document xmlns:w="{W}"><w:body><w:p>'
+        '<w:r><w:t xml:space="preserve">Miete </w:t></w:r>'
+        "<w:r><w:t>{{miete</w:t></w:r>"
+        '<w:r><w:t xml:space="preserve">_netto}} EUR</w:t></w:r>'
+        "<w:r><w:tab/></w:r>"
+        '<w:r><w:t xml:space="preserve"> brutto</w:t></w:r>'
+        "</w:p></w:body></w:document>"
+    ).encode()
+
+    ergebnis = fuelle(docx(xml), {"miete_netto": "1'800.00"})
+
+    assert _runs(ergebnis) == [["Miete ", "1'800.00", " EUR", "TAB", " brutto"]]
+    assert texte(ergebnis) == ["Miete 1'800.00 EUR brutto"]

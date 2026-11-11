@@ -120,16 +120,49 @@ def _ersetze_absatz(absatz: ET.Element, werte: dict[str, str]) -> None:
     if not knoten:
         return
 
-    gesamt = "".join(knoten_text.text or "" for knoten_text in knoten)
-    if _PLATZHALTER.search(gesamt) is None:
+    texte = [knoten_text.text or "" for knoten_text in knoten]
+    gesamt = "".join(texte)
+    treffer_liste = [
+        treffer for treffer in _PLATZHALTER.finditer(gesamt) if treffer.group(1) in werte
+    ]
+    if not treffer_liste:
         return
 
-    ersetzt = _PLATZHALTER.sub(
-        lambda treffer: werte.get(treffer.group(1), treffer.group(0)), gesamt
-    )
-    _setze_text(knoten[0], ersetzt)
-    for weiterer in knoten[1:]:
-        _setze_text(weiterer, "")
+    # Startposition jedes Text-Knotens im zusammengesetzten Absatztext.
+    starts = []
+    pos = 0
+    for text in texte:
+        starts.append(pos)
+        pos += len(text)
+
+    def knoten_an(stelle: int) -> int:
+        for index in range(len(texte) - 1, -1, -1):
+            if starts[index] <= stelle < starts[index] + len(texte[index]):
+                return index
+        return 0
+
+    # Von hinten ersetzen, damit frühere Positionen gueltig bleiben. Nur die
+    # Knoten, ueber die sich ein Platzhalter erstreckt, werden veraendert;
+    # Tabulatoren, Umbrueche und Formatierung der uebrigen Runs bleiben.
+    neu = list(texte)
+    for treffer in reversed(treffer_liste):
+        anfang, ende = treffer.start(), treffer.end()
+        erster = knoten_an(anfang)
+        letzter = knoten_an(ende - 1)
+        vorher = neu[erster][: anfang - starts[erster]]
+        nachher = neu[letzter][ende - starts[letzter] :]
+        wert = werte[treffer.group(1)]
+        if erster == letzter:
+            neu[erster] = vorher + wert + nachher
+        else:
+            neu[erster] = vorher + wert
+            for mitte in range(erster + 1, letzter):
+                neu[mitte] = ""
+            neu[letzter] = nachher
+
+    for knoten_text, alt, text in zip(knoten, texte, neu, strict=True):
+        if text != alt:
+            _setze_text(knoten_text, text)
 
 
 def _gebrauchte_namensraeume(wurzel: ET.Element) -> set[str]:
