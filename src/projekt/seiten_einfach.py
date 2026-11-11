@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from html import escape
 
+from projekt import felder
 from projekt.objekttabelle import SPALTEN
 
 TABS_EINFACH: tuple[tuple[str, str], ...] = (
@@ -287,6 +288,11 @@ def _formular_vertrag(
         return _ohne_objekte(meldung)
 
     anfang, daten, format_wert, ziel_wert = basis
+    mietende = (
+        _eingabe("mietende", "Mietende", daten.get("mietende", ""))
+        if "mietende" in felder.FELDER
+        else ""
+    )
     return (
         anfang
         + _eingabe(
@@ -295,6 +301,7 @@ def _formular_vertrag(
             daten.get("wohnraumnutzer_name", ""),
         )
         + _eingabe("mietbeginn", "Mietbeginn", daten.get("mietbeginn", ""))
+        + mietende
         + _textbereich("anfrage", "Änderungen (optional)", daten.get("anfrage", ""), 8)
         + _format_und_ziel(format_wert, ziel_wert)
         + '</table><p><button type="submit">Erstellen</button></p></form>'

@@ -4,6 +4,7 @@ from html.parser import HTMLParser
 
 import pytest
 
+from projekt import felder
 from projekt.seiten_einfach import (
     TABS_EINFACH,
     formular_objekttabelle,
@@ -169,6 +170,37 @@ def test_vertragsformular_hat_nur_die_noetigen_felder():
     assert [wert for wert, gewaehlt in formular.optionen["ziel"] if gewaehlt] == ["drive"]
     for gestrichen in ("objekt", "miete_netto", "nebenkosten", "kaution"):
         assert gestrichen not in namen(formular)
+
+
+def test_mietende_erscheint_nur_bei_vorhandenem_feld(monkeypatch):
+    monkeypatch.setattr(felder, "FELDER", (*felder.FELDER, "mietende"))
+
+    html = formular_vertrag(OBJEKTE, VORLAGEN, {"mietende": "31.12.2027"})
+    formular = lese(html)
+    assert namen(formular) == [
+        "objekt_id",
+        "vorlage",
+        "mieter_name",
+        "wohnraumnutzer_name",
+        "mietbeginn",
+        "mietende",
+        "anfrage",
+        "format",
+        "ziel",
+    ]
+    assert "Mietende" in " ".join(formular.texte)
+    assert "mietende" not in " ".join(formular.texte)
+    assert "31.12.2027" in html
+    assert "mietende" not in namen(lese(formular_uebergabe(OBJEKTE, VORLAGEN)))
+
+
+def test_mietende_fehlt_ohne_feld_im_katalog(monkeypatch):
+    monkeypatch.setattr(
+        felder, "FELDER", tuple(name for name in felder.FELDER if name != "mietende")
+    )
+
+    formular = lese(formular_vertrag(OBJEKTE, VORLAGEN, {"mietende": "31.12.2027"}))
+    assert "mietende" not in namen(formular)
 
 
 def test_vertragsformular_belegt_vor_und_maskiert():
