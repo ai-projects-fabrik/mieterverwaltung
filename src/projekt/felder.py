@@ -8,6 +8,7 @@ from decimal import Decimal
 
 FELDER: tuple[str, ...] = (
     "mieter_name",
+    "wohnraumnutzer_name",
     "objekt",
     "mietbeginn",
     "miete_netto",
@@ -15,7 +16,7 @@ FELDER: tuple[str, ...] = (
     "kaution",
 )
 
-_TEXT_FELDER = frozenset({"mieter_name", "objekt"})
+_TEXT_FELDER = frozenset({"mieter_name", "wohnraumnutzer_name", "objekt"})
 _BETRAGS_FELDER = frozenset({"miete_netto", "nebenkosten", "kaution"})
 _DATUM_ISO = re.compile(r"([0-9]{4})-([0-9]{2})-([0-9]{2})")
 _DATUM_PUNKT = re.compile(r"([0-9]{1,2})\.([0-9]{1,2})\.([0-9]{4})")

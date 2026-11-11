@@ -151,6 +151,7 @@ def test_vertragsformular_hat_nur_die_noetigen_felder():
         "objekt_id",
         "vorlage",
         "mieter_name",
+        "wohnraumnutzer_name",
         "mietbeginn",
         "anfrage",
         "format",

@@ -8,6 +8,7 @@ from projekt.felder import FELDER, normalisiere
 def test_felder_haben_feste_reihenfolge():
     assert FELDER == (
         "mieter_name",
+        "wohnraumnutzer_name",
         "objekt",
         "mietbeginn",
         "miete_netto",
@@ -30,12 +31,12 @@ def test_eingabe_wird_nicht_veraendert():
     }
 
 
-@pytest.mark.parametrize("feld", ["mieter_name", "objekt"])
+@pytest.mark.parametrize("feld", ["mieter_name", "wohnraumnutzer_name", "objekt"])
 def test_textfelder_werden_getrimmt(feld):
     assert normalisiere({feld: "  Musterweg 1  "}) == {feld: "Musterweg 1"}
 
 
-@pytest.mark.parametrize("feld", ["mieter_name", "objekt"])
+@pytest.mark.parametrize("feld", ["mieter_name", "wohnraumnutzer_name", "objekt"])
 def test_textfelder_erlauben_ein_bis_120_zeichen(feld):
     assert normalisiere({feld: "x"}) == {feld: "x"}
     assert normalisiere({feld: "x" * 120}) == {feld: "x" * 120}
@@ -50,6 +51,10 @@ def test_textfelder_erlauben_ein_bis_120_zeichen(feld):
         ("mieter_name", "   "),
         ("mieter_name", 5),
         ("mieter_name", "{{kaution}}"),
+        ("wohnraumnutzer_name", ""),
+        ("wohnraumnutzer_name", "   "),
+        ("wohnraumnutzer_name", 5),
+        ("wohnraumnutzer_name", "{{kaution}}"),
         ("objekt", "Weg }} 1"),
     ],
 )
