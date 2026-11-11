@@ -240,15 +240,6 @@
     "text": "**Datei:** `src/projekt/docx_fuellen.py` `tests/test_docx_fuellen.py`\n**Akzeptanztest:** `tests/akzeptanz/test_docx_fuellen.py`\n\nFehler: Steht `{{mieter_name}}` in einer Kopf- oder Fusszeile der Vorlage (oder ist ein Platzhalter falsch geschrieben, z. B. `{{Mieter_Name}}`), bleibt er im erzeugten Vertrag ohne Hinweis stehen. `fuelle` und `platzhalter` lesen nur `word/document.xml`.\n\n**Modulvertrag (`projekt.docx_fuellen`, Erweiterung):** `platzhalter` und `fuelle` verarbeiten zusaetzlich `word/header*.xml`, `word/footer*.xml`, `word/footnotes.xml` und `word/endnotes.xml`, soweit vorhanden. Neu: `unersetzt(docx: bytes) -> list[str]` liefert jede Stelle mit einem Rest `{{...}}` als `\"<Stelle>: {{text}}\"`. Stellen in fester Reihenfolge: `Text` (document.xml), `Kopfzeile`, `Fusszeile`, `Fussnoten`, `Endnoten`; innerhalb einer Stelle in Dokumentreihenfolge, Dateien mit Nummer nach Dateiname. Ein Rest ist alles, was `\\{\\{[^{}]*\\}\\}` im zusammengesetzten Absatztext trifft (auch ueber Run-Grenzen). Ungueltiges Paket: `ValueError` wie bei `platzhalter`.\n\n**Regeln**\n- Nur Standardbibliothek. `fuelle` bleibt fuer Platzhalter ohne Wert unveraendert (sie bleiben stehen).\n- Andere Dateien im Paket bleiben byte-gleich; nicht vorhandene Teile werden nicht angelegt.\n- Der bisherige Akzeptanztest des Moduls bleibt gueltig.\n\n**Acceptance Criteria**\n- Beispiele wortgleich in `tests/akzeptanz/test_docx_fuellen.py` (Mensch-gemergt, nicht aendern), keine uebersprungenen Tests.\n- Eigene Tests in `tests/test_docx_fuellen.py` ergaenzen Grenzwerte; nur synthetische Daten.\n"
   },
   {
-    "id": "mv-docx-auftraege",
-    "titel": "Nicht ersetzte Platzhalter melden (Modul auftraege)",
-    "freigegeben": true,
-    "abhaengig_von": [
-      "mv-docx-teile-fuellen"
-    ],
-    "text": "**Datei:** `src/projekt/auftraege.py` `tests/test_auftraege.py`\n**Akzeptanztest:** `tests/akzeptanz/test_auftraege.py`\n\nBaut auf `projekt.docx_fuellen.unersetzt` (Stufe mv-docx-fuellen) auf.\n\n**Modulvertrag (`projekt.auftraege`, Erweiterung):** `erstelle_vertrag` und `erstelle_protokoll` pruefen das gefuellte Dokument mit `unersetzt`; bei einem Rest `ValueError` mit \"Feld 'vorlage': Nicht ersetzte Platzhalter: \" und den Eintraegen, durch `; ` getrennt. Dann wird nichts geschrieben.\n\n**Regeln**\n- Der bestehende Fehler \"Platzhalter ohne Wert\" bleibt.\n- Der bisherige Akzeptanztest des Moduls bleibt gueltig.\n\n**Acceptance Criteria**\n- Beispiele wortgleich in `tests/akzeptanz/test_auftraege.py` (Mensch-gemergt, nicht aendern); die Teile zu `unersetzt` laufen ohne Skip.\n- Eigene Tests in `tests/test_auftraege.py` ergaenzen Grenzwerte; nur synthetische Daten.\n"
-  },
-  {
     "id": "mv-seite-mietende",
     "titel": "Eingabefeld Mietende im Vertragsformular (Modul seiten_einfach)",
     "freigegeben": true,
