@@ -83,6 +83,7 @@ jobs:
           CI_DATEI = "ci.yml"
           WARTE_VERSUCHE = 18  # nach --auto hoechstens 18 x 5 s auf den Merge von GitHub warten
           WARTE_SEKUNDEN = float(os.environ.get("WARTE_SEKUNDEN", "5"))
+          MERGE_WIEDERHOLUNGEN = 3  # "agent-gate is expected" direkt nach dem Ready-Wechsel: so oft erneut melden und wiederholen
           CI_WARTE_VERSUCHE = 12  # nach dem Merge hoechstens 12 x 5 s auf die Push-CI von main warten
           CI_WARTE_SEKUNDEN = float(os.environ.get("CI_WARTE_SEKUNDEN", "5"))
           # Kurzlebiges App-Token (nur contents + pull-requests: write): ausschliesslich fuer "pr ready" und "pr merge".
@@ -538,6 +539,24 @@ jobs:
                   return None
 
 
+          def merge_auto(pr_nr, head_sha, text):
+              """`gh pr merge --auto`. Der Wechsel Draft -> Ready oeffnet fuer denselben Commit eine neue Check-Suite; GitHub wertet
+              agent-gate dann kurz als "is expected" (Beleg: PR 81, Lauf 42913793611). Darum agent-gate erneut melden und bis zu
+              MERGE_WIEDERHOLUNGEN mal wiederholen. Jeder andere Fehler und ein dauerhaftes "expected" beenden den Lauf wie bisher (Exit 1)."""
+              env = dict(os.environ, GH_TOKEN=MERGE_TOKEN)
+              args = ["pr", "merge", pr_nr, "--repo", REPO, "--auto", "--squash", "--match-head-commit", head_sha]
+              for versuch in range(MERGE_WIEDERHOLUNGEN + 1):
+                  r = subprocess.run([*GH, *args], capture_output=True, text=True, env=env)
+                  if r.returncode == 0:
+                      return
+                  print(f"gh {' '.join(args)} endete mit Code {r.returncode}: {s(r.stderr.strip())}")
+                  if "is expected" not in r.stderr or versuch == MERGE_WIEDERHOLUNGEN:
+                      sys.exit(1)
+                  print(f"Protokoll: agent-gate noch nicht gewertet, erneut melden und wiederholen ({versuch + 1}/{MERGE_WIEDERHOLUNGEN}).")
+                  time.sleep(WARTE_SEKUNDEN)
+                  melde(head_sha, "success", text)
+
+
           def warte_auf_merge(pr_nr, head_sha):
               """Nach `gh pr merge --auto`: begrenzt warten, bis GitHub gemergt hat (Pflicht-Checks koennen noch laufen)."""
               for i in range(WARTE_VERSUCHE + 1):
@@ -674,10 +693,11 @@ jobs:
                   return 1
               if pr.get("draft"):
                   gh("pr", "ready", pr_nr, "--repo", REPO, token=MERGE_TOKEN)
+                  melde(head_sha, "success", text)  # der Ready-Wechsel oeffnet eine neue Suite: agent-gate dort erneut melden
               if pr.get("auto_merge"):
                   print("Auto-Merge war schon aktiv; der Check dieses Stands ist trotzdem bestanden.")
                   return 0
-              gh("pr", "merge", pr_nr, "--repo", REPO, "--auto", "--squash", "--match-head-commit", head_sha, token=MERGE_TOKEN)
+              merge_auto(pr_nr, head_sha, text)
               STAND["gemergt"] += 1  # ab jetzt laeuft/wartet ein Merge: kein weiterer Merge in diesem CI-Zyklus
               print("Auto-Merge aktiviert; GitHub merged, sobald alle Pflicht-Checks gruen sind.")
               if warte_auf_merge(pr_nr, head_sha):
