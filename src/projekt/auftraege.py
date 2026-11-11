@@ -8,7 +8,7 @@ from pathlib import Path
 from projekt.ablage import lese_vorlage, schreibe_ausgabe
 from projekt.anfrage import aenderungen_aus_text
 from projekt.bericht import bericht
-from projekt.docx_fuellen import fuelle, platzhalter
+from projekt.docx_fuellen import fuelle, platzhalter, unersetzt
 from projekt.einstellungen import ordner, pdf_ordner
 from projekt.felder import FELDER, normalisiere
 from projekt.objekte import lade_objekte, objekt_als_felder
@@ -176,9 +176,13 @@ def _fuelle_vorlage(vorlage: bytes, werte: dict[str, str]) -> bytes:
         raise ValueError("Platzhalter ohne Wert: " + ", ".join(fehlend))
 
     try:
-        return fuelle(vorlage, werte)
+        gefuellt = fuelle(vorlage, werte)
+        reste = unersetzt(gefuellt)
     except ValueError as fehler:
         raise ValueError(f"Feld 'vorlage': {fehler}") from fehler
+    if reste:
+        raise ValueError("Feld 'vorlage': Nicht ersetzte Platzhalter: " + "; ".join(reste))
+    return gefuellt
 
 
 def _schreibe_auftrag(
