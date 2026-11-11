@@ -26,6 +26,8 @@ VORLAGEN = {"lokal": ["vertrag.docx"], "drive": ["drive & co.docx"]}
 VERTRAG_FELDER = ["mieter_name", "objekt", "mietbeginn", "miete_netto", "nebenkosten", "kaution"]
 if "wohnraumnutzer_name" in FELDER:  # Ziel `mv-wohnraumnutzer`
     VERTRAG_FELDER.insert(1, "wohnraumnutzer_name")
+if "mietende" in FELDER:  # Ziel `mv-feld-mietende`
+    VERTRAG_FELDER.insert(VERTRAG_FELDER.index("mietbeginn") + 1, "mietende")
 PROTOKOLL_FELDER = [
     "mieter_name",
     "objekt",
