@@ -45,6 +45,8 @@ UNGUELTIG = [
 
 # Ziel `mv-wohnraumnutzer`: bis das Feld umgesetzt ist, gilt die bisherige Reihenfolge.
 WOHNRAUMNUTZER = "wohnraumnutzer_name" in FELDER
+# Ziel `mv-feld-mietende`: bis das Feld umgesetzt ist, gilt die bisherige Reihenfolge.
+MIETENDE = "mietende" in FELDER
 
 
 def test_felder_reihenfolge_ist_fest():
@@ -53,12 +55,15 @@ def test_felder_reihenfolge_ist_fest():
         "wohnraumnutzer_name",
         "objekt",
         "mietbeginn",
+        "mietende",
         "miete_netto",
         "nebenkosten",
         "kaution",
     )
     if not WOHNRAUMNUTZER:
         erwartet = tuple(f for f in erwartet if f != "wohnraumnutzer_name")
+    if not MIETENDE:
+        erwartet = tuple(f for f in erwartet if f != "mietende")
     assert FELDER == erwartet
 
 
@@ -94,3 +99,13 @@ def test_eingabe_wird_nicht_veraendert():
     eingabe = {"miete_netto": "1250"}
     normalisiere(eingabe)
     assert eingabe == {"miete_netto": "1250"}
+
+
+@pytest.mark.skipif(not MIETENDE, reason="Feld mietende noch nicht umgesetzt")
+def test_mietende_ist_ein_datum_wie_mietbeginn():
+    assert normalisiere({"mietende": "2027-12-31"}) == {"mietende": "31.12.2027"}
+    assert normalisiere({"mietende": "1.2.2028"}) == {"mietende": "01.02.2028"}
+    assert normalisiere({"mietbeginn": "2026-12-01"}) == {"mietbeginn": "01.12.2026"}
+    for roh in ("2027-02-30", "irgendwann", "", 5, None):
+        with pytest.raises(ValueError, match="mietende"):
+            normalisiere({"mietende": roh})
