@@ -11,6 +11,7 @@ FELDER: tuple[str, ...] = (
     "wohnraumnutzer_name",
     "objekt",
     "mietbeginn",
+    "mietende",
     "miete_netto",
     "nebenkosten",
     "kaution",
@@ -97,7 +98,7 @@ def normalisiere(daten: dict) -> dict[str, str]:
     for feld, wert in daten.items():
         if feld in _TEXT_FELDER:
             ergebnis[feld] = _text_normalisieren(feld, wert)
-        elif feld == "mietbeginn":
+        elif feld in ("mietbeginn", "mietende"):
             ergebnis[feld] = _datum_normalisieren(feld, wert)
         elif feld in _BETRAGS_FELDER:
             ergebnis[feld] = _betrag_normalisieren(feld, wert)
