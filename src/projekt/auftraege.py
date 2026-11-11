@@ -15,6 +15,7 @@ from projekt.objekte import lade_objekte, objekt_als_felder
 from projekt.protokoll import PROTOKOLL_FELDER, normalisiere_protokoll
 
 FORMATE: tuple[str, ...] = ("docx", "pdf", "docx+pdf")
+HERKUNFT: tuple[str, ...] = ("formular", "objekt", "anfrage")
 
 _HINWEIS = "PDF wird in Google Drive erzeugt und erscheint in wenigen Minuten in MV-pdf."
 _SLUG_ERSETZUNG = str.maketrans({"ä": "ae", "ö": "oe", "ü": "ue", "ß": "ss"})
@@ -107,6 +108,41 @@ def _formularfelder(form: dict[str, str], felder: tuple[str, ...]) -> dict[str, 
     return ergebnis
 
 
+def _werte_liste(
+    werte: dict[str, str],
+    herkunft: dict[str, str],
+    felder: tuple[str, ...],
+) -> list[dict[str, str]]:
+    """Liefert gesetzte Werte in Feldreihenfolge mit ihrer Herkunft."""
+
+    return [
+        {"feld": feld, "wert": werte[feld], "herkunft": herkunft[feld]}
+        for feld in felder
+        if feld in werte
+    ]
+
+
+def _anfrage_zeile_fehler(zeile: str) -> None:
+    raise ValueError(
+        f"Feld 'anfrage' (Aenderungen): Zeile nicht verstanden: '{zeile}'. "
+        "Erwartet wird 'Feld: Wert', z. B. 'Miete netto: 1300'."
+    )
+
+
+def _pruefe_anfrage(anfrage: str) -> None:
+    """Prueft, dass jede wirksame Zeile die Form ``Feld: Wert`` hat."""
+
+    for zeile in anfrage.splitlines():
+        if not zeile.strip() or zeile.lstrip().startswith(">"):
+            continue
+        if ":" not in zeile:
+            _anfrage_zeile_fehler(zeile)
+        schluessel = zeile.split(":", 1)[0]
+        feld = schluessel.strip().lower().replace(" ", "_")
+        if feld not in FELDER:
+            _anfrage_zeile_fehler(zeile)
+
+
 def _objektfelder(einstellungen: dict, objekt_id: str) -> dict[str, str]:
     datei = einstellungen.get("objekte_datei")
     if not isinstance(datei, str) or not datei.strip():
@@ -170,6 +206,9 @@ def _fuelle_vorlage(vorlage: bytes, werte: dict[str, str]) -> bytes:
         namen = platzhalter(vorlage)
     except ValueError as fehler:
         raise ValueError(f"Feld 'vorlage': {fehler}") from fehler
+
+    if not namen:
+        raise ValueError("Feld 'vorlage': Vorlage enthaelt keine Platzhalter")
 
     fehlend = [name for name in namen if name not in werte]
     if fehlend:
@@ -238,16 +277,23 @@ def erstelle_vertrag(form: dict[str, str], kontext: dict) -> dict:
     format_ = _format(form)
     ziel = _ziel(form)
 
-    bestand = _objektfelder(einstellungen, objekt_id) if objekt_id is not None else {}
-    bestand.update(_formularfelder(form, FELDER))
+    objektfelder = _objektfelder(einstellungen, objekt_id) if objekt_id is not None else {}
+    formularfelder = _formularfelder(form, FELDER)
+    bestand = dict(objektfelder)
+    bestand.update(formularfelder)
     alt = normalisiere(bestand)
 
     neu = dict(alt)
+    herkunft = {feld: "objekt" for feld in objektfelder}
+    herkunft.update({feld: "formular" for feld in formularfelder})
     anfrage = form.get("anfrage", "")
     if not isinstance(anfrage, str):
         raise ValueError("Feld 'anfrage' muss als Text uebergeben werden")
     if anfrage.strip():
-        neu.update(aenderungen_aus_text(anfrage))
+        _pruefe_anfrage(anfrage)
+        aenderungen = aenderungen_aus_text(anfrage)
+        herkunft.update({feld: "anfrage" for feld in aenderungen})
+        neu.update(aenderungen)
     aenderungsbericht = bericht(alt, neu)
 
     vorlage = google if google is not None else _lese_vorlage(einstellungen, ort, vorlagenname)
@@ -255,8 +301,41 @@ def erstelle_vertrag(form: dict[str, str], kontext: dict) -> dict:
     dateiname = f"vertrag-{slug(neu.get('mieter_name', ''))}.docx"
     return {
         "bericht": aenderungsbericht,
+        "werte": _werte_liste(neu, herkunft, FELDER),
         **_schreibe_auftrag(inhalt, dateiname, format_, ziel, einstellungen),
     }
+
+
+def protokoll_werte(form: dict[str, str], kontext: dict) -> list[dict[str, str]]:
+    """Liefert die Protokollwerte in Feldreihenfolge mit ihrer Herkunft.
+
+    Das gewaehlte Objekt liefert ``objekt``; alle uebrigen Werte kommen aus
+    dem Formular. Die Pruefungen entsprechen denen von
+    :func:`erstelle_protokoll`.
+    """
+
+    form = _pruefe_form(form)
+    einstellungen = _pruefe_kontext(kontext)
+    objekt_id = _objekt_id(form)
+    google = _google_vorlage(form, kontext)
+    if google is None:
+        _vorlage(form)
+    _format(form)
+    _ziel(form)
+
+    bestand: dict[str, str] = {}
+    herkunft: dict[str, str] = {}
+    if objekt_id is not None:
+        objektfelder = _objektfelder(einstellungen, objekt_id)
+        if "objekt" in objektfelder:
+            bestand["objekt"] = objektfelder["objekt"]
+            herkunft["objekt"] = "objekt"
+    formularfelder = _formularfelder(form, PROTOKOLL_FELDER)
+    bestand.update(formularfelder)
+    herkunft.update({feld: "formular" for feld in formularfelder})
+
+    werte = normalisiere_protokoll(bestand)
+    return _werte_liste(werte, herkunft, PROTOKOLL_FELDER)
 
 
 def erstelle_protokoll(form: dict[str, str], kontext: dict) -> dict:
