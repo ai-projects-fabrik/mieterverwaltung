@@ -1,7 +1,8 @@
 """Platzhalter in Word-Vorlagen finden und ersetzen.
 
-Die Vorlage bleibt in ihrem Aufbau unveraendert. Nur ``word/document.xml`` wird
-verarbeitet; alle anderen Dateien im DOCX-Paket werden byte-gleich uebernommen.
+Die Vorlage bleibt in ihrem Aufbau unveraendert. Verarbeitet werden
+``word/document.xml`` sowie vorhandene Kopf- und Fusszeilen, Fussnoten und
+Endnoten; alle anderen Dateien im DOCX-Paket werden byte-gleich uebernommen.
 """
 
 from __future__ import annotations
@@ -16,6 +17,12 @@ _DOKUMENT = "word/document.xml"
 _W = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
 _XML_SPACE = "{http://www.w3.org/XML/1998/namespace}space"
 _PLATZHALTER = re.compile(r"\{\{([a-z_]+)\}\}")
+_REST = re.compile(r"\{\{[^{}]*\}\}")
+_KOPF = re.compile(r"^word/header[^/]*\.xml$")
+_FUSS = re.compile(r"^word/footer[^/]*\.xml$")
+_FUSSNOTEN = "word/footnotes.xml"
+_ENDNOTEN = "word/endnotes.xml"
+_STELLEN = ("Text", "Kopfzeile", "Fusszeile", "Fussnoten", "Endnoten")
 
 
 def _lese_paket(docx: bytes) -> tuple[list[tuple[zipfile.ZipInfo, bytes]], bytes]:
@@ -44,14 +51,30 @@ def _lese_paket(docx: bytes) -> tuple[list[tuple[zipfile.ZipInfo, bytes]], bytes
     return eintraege, kommentar
 
 
-def _dokument_bytes(eintraege: list[tuple[zipfile.ZipInfo, bytes]]) -> bytes:
-    for info, daten in eintraege:
-        if info.filename == _DOKUMENT:
-            return daten
-    raise ValueError("docx enthaelt keine Datei word/document.xml")
+def _stelle(datei: str) -> str | None:
+    if datei == _DOKUMENT:
+        return "Text"
+    if _KOPF.fullmatch(datei):
+        return "Kopfzeile"
+    if _FUSS.fullmatch(datei):
+        return "Fusszeile"
+    if datei == _FUSSNOTEN:
+        return "Fussnoten"
+    if datei == _ENDNOTEN:
+        return "Endnoten"
+    return None
 
 
-def _parse_dokument(roh: bytes) -> tuple[ET.Element, dict[str, str]]:
+def _teil_dateien(eintraege: list[tuple[zipfile.ZipInfo, bytes]]) -> list[str]:
+    dateien = {info.filename for info, _ in eintraege if _stelle(info.filename) is not None}
+    return sorted(dateien, key=lambda name: (_STELLEN.index(_stelle(name)), name))
+
+
+def _paket_daten(eintraege: list[tuple[zipfile.ZipInfo, bytes]]) -> dict[str, bytes]:
+    return {info.filename: daten for info, daten in eintraege}
+
+
+def _parse_teil(roh: bytes, datei: str) -> tuple[ET.Element, dict[str, str]]:
     namensraeume: dict[str, str] = {}
     try:
         for _, (praefix, uri) in ET.iterparse(io.BytesIO(roh), events=("start-ns",)):
@@ -59,7 +82,7 @@ def _parse_dokument(roh: bytes) -> tuple[ET.Element, dict[str, str]]:
                 namensraeume[praefix] = uri
         wurzel = ET.fromstring(roh)
     except (ET.ParseError, ValueError) as fehler:
-        raise ValueError("docx enthaelt ungueltiges XML in word/document.xml") from fehler
+        raise ValueError(f"docx enthaelt ungueltiges XML in {datei}") from fehler
     return wurzel, namensraeume
 
 
@@ -117,7 +140,7 @@ def _gebrauchte_namensraeume(wurzel: ET.Element) -> set[str]:
     return gebraucht
 
 
-def _serialisiere(wurzel: ET.Element, namensraeume: dict[str, str]) -> bytes:
+def _serialisiere(wurzel: ET.Element, namensraeume: dict[str, str], datei: str) -> bytes:
     for praefix, uri in namensraeume.items():
         if praefix == "xml":
             continue
@@ -135,19 +158,25 @@ def _serialisiere(wurzel: ET.Element, namensraeume: dict[str, str]) -> bytes:
     try:
         return ET.tostring(wurzel, encoding="utf-8", xml_declaration=True)
     except ValueError as fehler:
-        raise ValueError("docx enthaelt ungueltige XML-Zeichen") from fehler
+        raise ValueError(f"docx enthaelt ungueltige XML-Zeichen in {datei}") from fehler
 
 
 def platzhalter(docx: bytes) -> list[str]:
-    """Liefert die in der DOCX-Vorlage vorkommenden Platzhalter sortiert und eindeutig."""
+    """Liefert die in der DOCX-Vorlage vorkommenden Platzhalter sortiert und eindeutig.
+
+    Geprueft werden Text, Kopfzeilen, Fusszeilen, Fussnoten und Endnoten.
+    """
 
     eintraege, _ = _lese_paket(docx)
-    wurzel, _ = _parse_dokument(_dokument_bytes(eintraege))
-    namen = {
-        treffer
-        for absatz in wurzel.iter(f"{{{_W}}}p")
-        for treffer in _PLATZHALTER.findall(_absatz_text(absatz))
-    }
+    daten = _paket_daten(eintraege)
+    namen: set[str] = set()
+    for datei in _teil_dateien(eintraege):
+        wurzel, _ = _parse_teil(daten[datei], datei)
+        namen.update(
+            treffer
+            for absatz in wurzel.iter(f"{{{_W}}}p")
+            for treffer in _PLATZHALTER.findall(_absatz_text(absatz))
+        )
     return sorted(namen)
 
 
@@ -161,18 +190,41 @@ def fuelle(docx: bytes, werte: dict[str, str]) -> bytes:
 
     _werte_pruefen(werte)
     eintraege, kommentar = _lese_paket(docx)
-    wurzel, namensraeume = _parse_dokument(_dokument_bytes(eintraege))
+    daten = _paket_daten(eintraege)
+    neu: dict[str, bytes] = {}
+    for datei in _teil_dateien(eintraege):
+        wurzel, namensraeume = _parse_teil(daten[datei], datei)
+        for absatz in wurzel.iter(f"{{{_W}}}p"):
+            _ersetze_absatz(absatz, werte)
+        neu[datei] = _serialisiere(wurzel, namensraeume, datei)
 
-    for absatz in wurzel.iter(f"{{{_W}}}p"):
-        _ersetze_absatz(absatz, werte)
-
-    neues_dokument = _serialisiere(wurzel, namensraeume)
     puffer = io.BytesIO()
     try:
         with zipfile.ZipFile(puffer, "w") as paket:
             paket.comment = kommentar
             for info, daten in eintraege:
-                paket.writestr(info, neues_dokument if info.filename == _DOKUMENT else daten)
+                paket.writestr(info, neu.get(info.filename, daten))
     except (OSError, ValueError, zlib.error) as fehler:
         raise ValueError("docx konnte nicht neu geschrieben werden") from fehler
     return puffer.getvalue()
+
+
+def unersetzt(docx: bytes) -> list[str]:
+    """Meldet verbliebene Platzhalter der Form ``{{...}}`` in Dokumentreihenfolge.
+
+    Jeder Eintrag hat die Form ``"<Stelle>: {{text}}"``. Die Stellen folgen der
+    festen Reihenfolge Text, Kopfzeile, Fusszeile, Fussnoten, Endnoten; Dateien
+    einer Stelle werden nach Dateiname sortiert.
+    """
+
+    eintraege, _ = _lese_paket(docx)
+    daten = _paket_daten(eintraege)
+    ergebnis: list[str] = []
+    for datei in _teil_dateien(eintraege):
+        wurzel, _ = _parse_teil(daten[datei], datei)
+        stelle = _stelle(datei)
+        for absatz in wurzel.iter(f"{{{_W}}}p"):
+            ergebnis.extend(
+                f"{stelle}: {treffer.group(0)}" for treffer in _REST.finditer(_absatz_text(absatz))
+            )
+    return ergebnis
