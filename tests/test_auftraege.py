@@ -9,7 +9,15 @@ import zipfile
 import pytest
 
 import projekt.auftraege as auftraege
-from projekt.auftraege import FORMATE, erstelle_protokoll, erstelle_vertrag, slug
+from projekt.auftraege import (
+    FORMATE,
+    HERKUNFT,
+    erstelle_protokoll,
+    erstelle_vertrag,
+    protokoll_werte,
+    slug,
+)
+from projekt.protokoll import PROTOKOLL_FELDER
 
 W = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
 VERTRAG = [
@@ -204,6 +212,113 @@ def test_anfrage_ueberschreibt_nur_genannte_felder(umgebung):
     assert "mieter_name: Anna Muster -> Bert Beispiel" in ergebnis["bericht"]
     assert "kaution: 3'600.00 -> 4'000.00" in ergebnis["bericht"]
     assert "mietbeginn" not in ergebnis["bericht"]
+
+
+def test_herkunft_der_vertragswerte_folgt_formular_objekt_und_anfrage(umgebung):
+    form = {
+        **vertragsform(),
+        "miete_netto": "1300",
+        "anfrage": "Mieter name: Bert Beispiel\nKaution: 3600",
+    }
+    ergebnis = erstelle_vertrag(form, umgebung)
+
+    assert HERKUNFT == ("formular", "objekt", "anfrage")
+    assert ergebnis["werte"] == [
+        {"feld": "mieter_name", "wert": "Bert Beispiel", "herkunft": "anfrage"},
+        {"feld": "objekt", "wert": "Musterweg 1", "herkunft": "objekt"},
+        {"feld": "mietbeginn", "wert": "01.01.2026", "herkunft": "formular"},
+        {"feld": "miete_netto", "wert": "1'300.00", "herkunft": "formular"},
+        {"feld": "nebenkosten", "wert": "200.00", "herkunft": "objekt"},
+        {"feld": "kaution", "wert": "3'600.00", "herkunft": "anfrage"},
+    ]
+
+
+def test_vertragswerte_enthalten_nur_gesetzte_felder_in_feldreihenfolge(umgebung):
+    (umgebung["ordner"]["vl"] / "nur-name.docx").write_bytes(docx_bytes(["{{mieter_name}}"]))
+    ergebnis = erstelle_vertrag(
+        {"vorlage": "lokal:nur-name.docx", "mieter_name": "Cora Test"}, umgebung
+    )
+    assert ergebnis["werte"] == [
+        {"feld": "mieter_name", "wert": "Cora Test", "herkunft": "formular"}
+    ]
+
+
+@pytest.mark.parametrize(
+    "zeile",
+    [
+        "Bitte die Miete erhoehen",
+        "Hinweis: bis Freitag",
+        "Miete netto 1300",
+    ],
+)
+def test_unverstandene_anfragezeile_nennt_zeile_und_schreibt_nichts(umgebung, zeile):
+    with pytest.raises(ValueError) as fehler:
+        erstelle_vertrag({**vertragsform(), "anfrage": f"Kaution: 4000\n{zeile}"}, umgebung)
+
+    meldung = str(fehler.value)
+    assert zeile in meldung
+    assert "Feld: Wert" in meldung
+    assert "anfrage" in meldung.casefold()
+    assert keine_dateien(umgebung)
+
+
+def test_zitierte_und_leere_anfragezeilen_bleiben_erlaubt(umgebung):
+    form = {
+        **vertragsform(),
+        "anfrage": "\r\n  > Hinweis: nicht auswerten\r\nMIETE NETTO: 1300\r\n",
+    }
+    ergebnis = erstelle_vertrag(form, umgebung)
+    werte = {eintrag["feld"]: eintrag for eintrag in ergebnis["werte"]}
+    assert werte["miete_netto"] == {
+        "feld": "miete_netto",
+        "wert": "1'300.00",
+        "herkunft": "anfrage",
+    }
+
+
+def test_protokoll_werte_haben_feldreihenfolge_und_herkunft(umgebung):
+    werte = protokoll_werte(protokollform(), umgebung)
+    assert [eintrag["feld"] for eintrag in werte] == list(PROTOKOLL_FELDER)
+    assert werte == [
+        {"feld": "mieter_name", "wert": "Anna Muster", "herkunft": "formular"},
+        {"feld": "objekt", "wert": "Musterweg 1", "herkunft": "objekt"},
+        {"feld": "uebergabedatum", "wert": "01.02.2026", "herkunft": "formular"},
+        {"feld": "art", "wert": "Einzug", "herkunft": "formular"},
+        {"feld": "zaehler_strom", "wert": "1234.5", "herkunft": "formular"},
+        {"feld": "zaehler_wasser", "wert": "56", "herkunft": "formular"},
+        {"feld": "schluessel_anzahl", "wert": "3", "herkunft": "formular"},
+        {"feld": "bemerkungen", "wert": "keine", "herkunft": "formular"},
+    ]
+    assert "werte" not in erstelle_protokoll(protokollform(), umgebung)
+
+
+def test_protokoll_werte_nutzt_formularobjekt_und_meldet_fehler(umgebung):
+    werte = protokoll_werte({**protokollform(), "objekt": "Formularweg 2"}, umgebung)
+    objekt = next(eintrag for eintrag in werte if eintrag["feld"] == "objekt")
+    assert objekt == {
+        "feld": "objekt",
+        "wert": "Formularweg 2",
+        "herkunft": "formular",
+    }
+    with pytest.raises(ValueError, match="art"):
+        protokoll_werte({**protokollform(), "art": "Besichtigung"}, umgebung)
+
+
+def test_vorlage_ohne_platzhalter_ist_fehler_und_schreibt_nichts(umgebung):
+    leer = docx_bytes(["Ganze Vorlage ohne Platzhalter"])
+    for ort in ("vl", "vd"):
+        (umgebung["ordner"][ort] / "leer.docx").write_bytes(leer)
+    for auswahl in ("lokal:leer.docx", "drive:leer.docx"):
+        with pytest.raises(ValueError, match="Vorlage enthaelt keine Platzhalter"):
+            erstelle_vertrag({**vertragsform(), "vorlage": auswahl}, umgebung)
+        with pytest.raises(ValueError, match="Vorlage enthaelt keine Platzhalter"):
+            erstelle_protokoll({**protokollform(), "vorlage": auswahl}, umgebung)
+    with pytest.raises(ValueError, match="Vorlage enthaelt keine Platzhalter"):
+        erstelle_vertrag(
+            {**vertragsform(), "vorlage": "google:abc"},
+            {**umgebung, "vorlage_bytes": leer},
+        )
+    assert keine_dateien(umgebung)
 
 
 def test_pdf_und_docx_pdf_schreiben_csv_und_hinweis(umgebung):
