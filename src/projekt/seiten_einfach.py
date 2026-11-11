@@ -289,6 +289,11 @@ def _formular_vertrag(
     anfang, daten, format_wert, ziel_wert = basis
     return (
         anfang
+        + _eingabe(
+            "wohnraumnutzer_name",
+            "Name des Wohnraumnutzers",
+            daten.get("wohnraumnutzer_name", ""),
+        )
         + _eingabe("mietbeginn", "Mietbeginn", daten.get("mietbeginn", ""))
         + _textbereich("anfrage", "Änderungen (optional)", daten.get("anfrage", ""), 8)
         + _format_und_ziel(format_wert, ziel_wert)
