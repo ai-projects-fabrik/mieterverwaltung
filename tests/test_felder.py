@@ -11,6 +11,7 @@ def test_felder_haben_feste_reihenfolge():
         "wohnraumnutzer_name",
         "objekt",
         "mietbeginn",
+        "mietende",
         "miete_netto",
         "nebenkosten",
         "kaution",
@@ -64,6 +65,10 @@ def test_ungueltige_textfelder_nennen_das_feld(feld, wert):
 
 
 @pytest.mark.parametrize(
+    "feld",
+    ["mietbeginn", "mietende"],
+)
+@pytest.mark.parametrize(
     ("wert", "erwartet"),
     [
         ("2026-12-01", "01.12.2026"),
@@ -74,10 +79,14 @@ def test_ungueltige_textfelder_nennen_das_feld(feld, wert):
         ("0001-01-01", "01.01.0001"),
     ],
 )
-def test_gueltige_daten_werden_normalisiert(wert, erwartet):
-    assert normalisiere({"mietbeginn": wert}) == {"mietbeginn": erwartet}
+def test_gueltige_daten_werden_normalisiert(feld, wert, erwartet):
+    assert normalisiere({feld: wert}) == {feld: erwartet}
 
 
+@pytest.mark.parametrize(
+    "feld",
+    ["mietbeginn", "mietende"],
+)
 @pytest.mark.parametrize(
     "wert",
     [
@@ -95,9 +104,16 @@ def test_gueltige_daten_werden_normalisiert(wert, erwartet):
         20260101,
     ],
 )
-def test_ungueltige_daten_nennen_das_feld(wert):
-    with pytest.raises(ValueError, match="mietbeginn"):
-        normalisiere({"mietbeginn": wert})
+def test_ungueltige_daten_nennen_das_feld(feld, wert):
+    with pytest.raises(ValueError, match=feld):
+        normalisiere({feld: wert})
+
+
+def test_mietende_wird_nicht_gegen_mietbeginn_geprueft():
+    assert normalisiere({"mietbeginn": "2027-01-01", "mietende": "2026-01-01"}) == {
+        "mietbeginn": "01.01.2027",
+        "mietende": "01.01.2026",
+    }
 
 
 @pytest.mark.parametrize(
