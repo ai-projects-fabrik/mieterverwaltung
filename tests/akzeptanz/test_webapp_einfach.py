@@ -2,6 +2,7 @@
 
 import html
 import importlib.util
+import inspect
 import io
 import json
 import zipfile
@@ -252,3 +253,83 @@ def test_fehlerhafte_anfragen_geben_4xx_nie_5xx(kontext):
     assert antwort("POST", "/objekte", FORM, b"x" * (1024 * 1024 + 1), kontext)[0] == 413
     assert antwort("GET", "/mietvertrag", {}, b"", {})[0] == 400
     assert antwort(5, "/", {}, b"", kontext)[0] == 400
+
+
+# --- Ziel `mv-webapp-werte`: Ergebnisseite mit allen Werten, klare Fehler fuer Aenderungstext ---
+
+
+def _werte_umgesetzt():
+    import projekt.auftraege
+    from projekt.seiten import ergebnis
+
+    return hasattr(projekt.auftraege, "HERKUNFT") and (
+        "werte" in inspect.signature(ergebnis).parameters
+    )
+
+
+ERGEBNIS_WERTE = pytest.mark.skipif(
+    not _werte_umgesetzt(), reason="Eingesetzte Werte noch nicht umgesetzt"
+)
+
+PROTOKOLL = ["{{art}}: {{mieter_name}} in {{objekt}} am {{uebergabedatum}}"]
+
+
+def vertrag_felder(**zusatz):
+    return {
+        "objekt_id": "weg-1",
+        "vorlage": "lokal:mietvertrag.docx",
+        "mieter_name": "Erika Muster",
+        "mietbeginn": "1.2.2027",
+        "format": "docx",
+        "ziel": "lokal",
+        **zusatz,
+    }
+
+
+@ERGEBNIS_WERTE
+def test_ergebnisseite_zeigt_alle_werte_mit_herkunft(kontext):
+    felder = vertrag_felder(anfrage="Kaution: 4000", miete_netto="1300")
+    status, _, koerper = post(kontext, "/mietvertrag", felder)
+    text = seite((status, {}, koerper))
+    assert status == 200
+    for zeile in (
+        "Name des Mieters: Erika Muster (aus Formular)",
+        "Objekt: Musterweg 1, 8000 Zuerich (aus Objekt)",
+        "Mietbeginn: 01.02.2027 (aus Formular)",
+        "Nebenkosten: 200.00 (aus Objekt)",
+        "Kaution: 4'000.00 (aus Änderungen)",
+    ):
+        assert zeile in text
+    assert "keine Aenderungen" not in text
+
+
+@ERGEBNIS_WERTE
+def test_unverstandener_aenderungstext_gibt_400_mit_zeile_und_schreibt_nichts(kontext, tmp_path):
+    felder = vertrag_felder(anfrage="Kaution: 4000\nBitte die Miete erhoehen")
+    status, _, koerper = post(kontext, "/mietvertrag", felder)
+    text = seite((status, {}, koerper))
+    assert status == 400
+    assert "Bitte die Miete erhoehen" in text and "Feld: Wert" in text
+    assert "Erika Muster" in text  # Formular bleibt ausgefuellt
+    assert list((tmp_path / "al").iterdir()) == []
+    assert not (tmp_path / "letzte_auswahl.json").exists()
+
+
+@ERGEBNIS_WERTE
+def test_protokoll_ergebnisseite_zeigt_werte(kontext, tmp_path):
+    (tmp_path / "vl" / "uebergabe.docx").write_bytes(docx_bytes(PROTOKOLL))
+    felder = {
+        "objekt_id": "weg-1",
+        "vorlage": "lokal:uebergabe.docx",
+        "mieter_name": "Erika Muster",
+        "uebergabedatum": "1.2.2027",
+        "art": "einzug",
+        "format": "docx",
+        "ziel": "lokal",
+    }
+    status, _, koerper = post(kontext, "/protokoll", felder)
+    text = seite((status, {}, koerper))
+    assert status == 200
+    assert "Name des Mieters: Erika Muster (aus Formular)" in text
+    assert "Objekt: Musterweg 1, 8000 Zuerich (aus Objekt)" in text
+    assert "Dateien angelegt" in text

@@ -12,6 +12,7 @@ if importlib.util.find_spec("projekt.auftraege") is None:
     pytest.skip("Modul noch nicht umgesetzt", allow_module_level=True)
 
 from projekt.auftraege import FORMATE, erstelle_protokoll, erstelle_vertrag, slug  # noqa: E402
+import projekt.auftraege  # noqa: E402
 import projekt.docx_fuellen  # noqa: E402
 from projekt.felder import FELDER  # noqa: E402
 
@@ -403,3 +404,108 @@ def test_uebrige_platzhalter_sind_ein_fehler_und_nichts_wird_geschrieben(
         erstelle_vertrag({**basis(), "vorlage": "lokal:kaputt.docx"}, kontext)
     assert stelle in str(fehler.value)
     assert leer(kontext)
+
+
+# --- Ziel `mv-auftraege-werte`: eingesetzte Werte mit Herkunft, Fehler fuer Aenderungstext ---
+
+ERGEBNIS_WERTE = pytest.mark.skipif(
+    not hasattr(projekt.auftraege, "HERKUNFT"), reason="Eingesetzte Werte noch nicht umgesetzt"
+)
+
+
+def wert(feld, text, herkunft):
+    return {"feld": feld, "wert": text, "herkunft": herkunft}
+
+
+@ERGEBNIS_WERTE
+def test_herkunft_ist_formular_objekt_anfrage():
+    assert projekt.auftraege.HERKUNFT == ("formular", "objekt", "anfrage")
+
+
+@ERGEBNIS_WERTE
+def test_vertrag_liefert_alle_eingesetzten_werte_mit_herkunft(kontext):
+    ergebnis = erstelle_vertrag(basis(), kontext)
+    erwartet = [
+        wert("mieter_name", "Bert Beispiel", "formular"),
+        wert("objekt", "Musterweg 1, 8000 Zuerich", "objekt"),
+        wert("mietbeginn", "01.01.2026", "formular"),
+        wert("miete_netto", "1'200.00", "objekt"),
+        wert("nebenkosten", "200.00", "objekt"),
+        wert("kaution", "3'600.00", "objekt"),
+    ]
+    assert ergebnis["werte"] == erwartet
+    assert "keine Aenderungen" in ergebnis["bericht"]
+
+
+@ERGEBNIS_WERTE
+def test_herkunft_formular_ueberschreibt_objekt_und_anfrage_beides(kontext):
+    form = {**basis(), "miete_netto": "1300", "anfrage": "Mieter name: Anna Muster\nKaution: 4000"}
+    werte = {w["feld"]: w for w in erstelle_vertrag(form, kontext)["werte"]}
+    assert werte["mieter_name"] == wert("mieter_name", "Anna Muster", "anfrage")
+    assert werte["kaution"] == wert("kaution", "4'000.00", "anfrage")
+    assert werte["miete_netto"] == wert("miete_netto", "1'300.00", "formular")
+    assert werte["nebenkosten"] == wert("nebenkosten", "200.00", "objekt")
+    assert [w["feld"] for w in erstelle_vertrag(form, kontext)["werte"]] == [
+        f for f in FELDER if f in werte
+    ]
+
+
+@ERGEBNIS_WERTE
+def test_anfrage_mit_gleichem_wert_wie_zuvor_zaehlt_als_anfrage(kontext):
+    form = {**basis(), "anfrage": "Kaution: 3600"}
+    werte = {w["feld"]: w for w in erstelle_vertrag(form, kontext)["werte"]}
+    assert werte["kaution"] == wert("kaution", "3'600.00", "anfrage")
+
+
+@ERGEBNIS_WERTE
+@pytest.mark.parametrize(
+    "text",
+    [
+        "Bitte die Miete erhoehen",
+        "Miete netto: 1300\nBitte pruefen",
+        "Hinweis: bis Freitag",
+        "Miete netto 1300",
+        "Mieter name: Anna Muster\r\nund noch etwas",
+    ],
+)
+def test_unverstandener_aenderungstext_ist_fehler_mit_der_zeile(kontext, text):
+    schlecht = next(
+        z
+        for z in text.splitlines()
+        if z.strip() and not z.lower().startswith(("miete netto:", "mieter name:"))
+    )
+    with pytest.raises(ValueError) as fehler:
+        erstelle_vertrag({**basis(), "anfrage": text}, kontext)
+    meldung = str(fehler.value)
+    assert schlecht in meldung
+    assert "Feld: Wert" in meldung
+    assert "anfrage" in meldung.casefold() or "nderungen" in meldung
+    assert leer(kontext)
+
+
+@ERGEBNIS_WERTE
+def test_gueltiger_aenderungstext_bleibt_erlaubt(kontext):
+    text = "\r\n  \r\n> zitiert: egal\r\nMIETE NETTO: 1300\n\nObjekt: Weg 1, 8000 Zuerich: 2. OG\n"
+    ergebnis = erstelle_vertrag({**basis(), "anfrage": text}, kontext)
+    werte = {w["feld"]: w["wert"] for w in ergebnis["werte"]}
+    assert werte["miete_netto"] == "1'300.00"
+    assert werte["objekt"] == "Weg 1, 8000 Zuerich: 2. OG"
+
+
+@ERGEBNIS_WERTE
+def test_protokoll_werte_in_reihenfolge_mit_herkunft(kontext):
+    from projekt.auftraege import protokoll_werte
+    from projekt.protokoll import PROTOKOLL_FELDER
+
+    werte = protokoll_werte(protokoll_form(), kontext)
+    assert [w["feld"] for w in werte] == list(PROTOKOLL_FELDER)
+    nach_feld = {w["feld"]: w for w in werte}
+    assert nach_feld["objekt"] == wert("objekt", "Musterweg 1, 8000 Zuerich", "objekt")
+    assert nach_feld["mieter_name"] == wert("mieter_name", "Anna Muster", "formular")
+    assert nach_feld["uebergabedatum"] == wert("uebergabedatum", "01.02.2026", "formular")
+    assert nach_feld["zaehler_strom"]["wert"] == "1234.5"
+    assert all(w["herkunft"] in projekt.auftraege.HERKUNFT for w in werte)
+    # erstelle_protokoll bleibt unveraendert (Ergebnis ohne Schluessel `werte`)
+    assert "werte" not in erstelle_protokoll(protokoll_form(), kontext)
+    with pytest.raises(ValueError, match="art"):
+        protokoll_werte({**protokoll_form(), "art": "Besichtigung"}, kontext)

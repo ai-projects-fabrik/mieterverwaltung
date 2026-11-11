@@ -1,6 +1,7 @@
 """Akzeptanztest (spec-first) fuer projekt.seiten (Ziel `mv-seiten`)."""
 
 import importlib.util
+import inspect
 from html.parser import HTMLParser
 
 import pytest
@@ -222,3 +223,50 @@ def test_ergebnisseite_mit_hinweis():
     assert "PDF wird in Google Drive erzeugt <bald>" in "".join(seite.texte)
     assert "Google Drive" not in "".join(Seite(ergebnis("T", "b", [])).texte)
     assert "Google Drive" not in "".join(Seite(ergebnis("T", "b", [], hinweis="")).texte)
+
+
+# --- Ziel `mv-seiten-werte`: Ergebnisseite zeigt alle eingesetzten Werte mit Herkunft ---
+
+ERGEBNIS_WERTE = pytest.mark.skipif(
+    "werte" not in inspect.signature(ergebnis).parameters,
+    reason="Eingesetzte Werte noch nicht umgesetzt",
+)
+
+
+@ERGEBNIS_WERTE
+def test_ergebnisseite_zeigt_werte_mit_anzeigename_und_herkunft():
+    werte = [
+        {"feld": "mieter_name", "wert": "Anna <Muster>", "herkunft": "formular"},
+        {"feld": "miete_netto", "wert": "1'800.00", "herkunft": "objekt"},
+        {"feld": "kaution", "wert": "4'000.00", "herkunft": "anfrage"},
+        {"feld": "unbekannt_x", "wert": "7", "herkunft": "formular"},
+    ]
+    html = ergebnis("Mietvertrag erstellt", "", ["v-1.docx"], werte=werte)
+    assert "<Muster>" not in html
+    seite = Seite(html)
+    texte = seite.texte
+    for zeile in (
+        "Name des Mieters: Anna <Muster> (aus Formular)",
+        "Miete: 1'800.00 (aus Objekt)",
+        "Kaution: 4'000.00 (aus Änderungen)",
+        "unbekannt_x: 7 (aus Formular)",
+    ):
+        assert zeile in texte
+    zeilen = [t for t in texte if "(aus " in t]
+    assert [z.split(":")[0] for z in zeilen] == [
+        "Name des Mieters",
+        "Miete",
+        "Kaution",
+        "unbekannt_x",
+    ]
+    assert seite.tags.count("li") == 5  # 4 Werte + 1 Datei
+    assert "v-1.docx" in texte
+
+
+@ERGEBNIS_WERTE
+def test_ergebnisseite_mit_werten_laesst_leeren_bericht_weg():
+    werte = [{"feld": "objekt", "wert": "Weg 1", "herkunft": "objekt"}]
+    assert "pre" not in Seite(ergebnis("T", "", [], werte=werte)).tags
+    assert "pre" in Seite(ergebnis("T", "objekt: a -> b", [], werte=werte)).tags
+    assert "pre" in Seite(ergebnis("T", "", [])).tags  # ohne werte unveraendert
+    assert "li" not in Seite(ergebnis("T", "x", [], werte=[])).tags
