@@ -6,7 +6,7 @@ import zipfile
 
 import pytest
 
-from projekt.docx_fuellen import fuelle, platzhalter
+from projekt.docx_fuellen import fuelle, platzhalter, unersetzt
 
 W = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
 
@@ -31,6 +31,39 @@ def dokument(*absaetze: str) -> bytes:
 def texte(daten: bytes) -> list[str]:
     with zipfile.ZipFile(io.BytesIO(daten)) as paket:
         wurzel = ET.fromstring(paket.read("word/document.xml"))
+    return ["".join(t.text or "" for t in p.iter(f"{{{W}}}t")) for p in wurzel.iter(f"{{{W}}}p")]
+
+
+def _teil_xml(wurzel: str, absaetze: list[list[str]]) -> bytes:
+    text = f'<w:{wurzel} xmlns:w="{W}">'
+    for runs in absaetze:
+        text += "<w:p>"
+        for run in runs:
+            text += f'<w:r><w:t xml:space="preserve">{run}</w:t></w:r>'
+        text += "</w:p>"
+    return (text + f"</w:{wurzel}>").encode()
+
+
+def docx_mit_teilen(haupt: list[list[str]], teile: dict[str, list[list[str]]]) -> bytes:
+    puffer = io.BytesIO()
+    with zipfile.ZipFile(puffer, "w", zipfile.ZIP_DEFLATED) as paket:
+        paket.writestr("[Content_Types].xml", "<Types/>")
+        paket.writestr("word/document.xml", _teil_xml("document", haupt))
+        paket.writestr("word/styles.xml", b"<styles>unveraendert</styles>")
+        for name, absaetze in teile.items():
+            if name.startswith(("header", "footer")):
+                wurzel = "hdr"
+            elif name == "footnotes":
+                wurzel = "footnotes"
+            else:
+                wurzel = "endnotes"
+            paket.writestr(f"word/{name}.xml", _teil_xml(wurzel, absaetze))
+    return puffer.getvalue()
+
+
+def teil_texte(daten: bytes, name: str) -> list[str]:
+    with zipfile.ZipFile(io.BytesIO(daten)) as paket:
+        wurzel = ET.fromstring(paket.read(f"word/{name}.xml"))
     return ["".join(t.text or "" for t in p.iter(f"{{{W}}}t")) for p in wurzel.iter(f"{{{W}}}p")]
 
 
@@ -104,3 +137,75 @@ def test_unbenutzte_namensraeume_bleiben_deklariert():
         neu = paket.read("word/document.xml")
     assert b'xmlns:w14="http://schemas.microsoft.com/office/word/2010/wordml"' in neu
     assert texte(ergebnis) == ["Weg 1"]
+
+
+def test_platzhalter_und_fuelle_verarbeiten_alle_textteile():
+    daten = docx_mit_teilen(
+        [["Mieter {{mieter_name}}"]],
+        {
+            "header10": [["Kopf {{kaution}}"]],
+            "header2": [["Kopf zwei {{objekt}}"]],
+            "footer1": [["Fuss {{mietbeginn}}"]],
+            "footnotes": [["Note {{objekt}}"]],
+            "endnotes": [["Ende {{kaution}}"]],
+        },
+    )
+    assert platzhalter(daten) == ["kaution", "mietbeginn", "mieter_name", "objekt"]
+    assert unersetzt(daten) == [
+        "Text: {{mieter_name}}",
+        "Kopfzeile: {{kaution}}",
+        "Kopfzeile: {{objekt}}",
+        "Fusszeile: {{mietbeginn}}",
+        "Fussnoten: {{objekt}}",
+        "Endnoten: {{kaution}}",
+    ]
+
+    ergebnis = fuelle(
+        daten,
+        {
+            "mieter_name": "Anna",
+            "kaution": "3'000.00",
+            "objekt": "Weg 1",
+            "mietbeginn": "01.01.2026",
+        },
+    )
+    assert texte(ergebnis) == ["Mieter Anna"]
+    assert teil_texte(ergebnis, "header10") == ["Kopf 3'000.00"]
+    assert teil_texte(ergebnis, "header2") == ["Kopf zwei Weg 1"]
+    assert teil_texte(ergebnis, "footer1") == ["Fuss 01.01.2026"]
+    assert teil_texte(ergebnis, "footnotes") == ["Note Weg 1"]
+    assert teil_texte(ergebnis, "endnotes") == ["Ende 3'000.00"]
+    with zipfile.ZipFile(io.BytesIO(ergebnis)) as paket:
+        assert paket.read("word/styles.xml") == b"<styles>unveraendert</styles>"
+
+
+def test_unersetzt_findet_rest_ueber_run_grenzen_und_nach_fuellen():
+    daten = docx_mit_teilen(
+        [
+            [
+                "Mieter {{Mieter",
+                "_Name}} und {{mieter_name}}",
+            ]
+        ],
+        {"header1": [["Kopf {{Name des ", "Mieters}}"]]},
+    )
+    assert unersetzt(daten) == [
+        "Text: {{Mieter_Name}}",
+        "Text: {{mieter_name}}",
+        "Kopfzeile: {{Name des Mieters}}",
+    ]
+    assert unersetzt(fuelle(daten, {"mieter_name": "Anna"})) == [
+        "Text: {{Mieter_Name}}",
+        "Kopfzeile: {{Name des Mieters}}",
+    ]
+    assert unersetzt(fuelle(daten, {"mieter_name": "Anna", "Mieter_Name": "x"})) == [
+        "Text: {{Mieter_Name}}",
+        "Kopfzeile: {{Name des Mieters}}",
+    ]
+
+
+def test_unersetzt_prueft_das_paket_und_meldet_keine_leeren_reste():
+    assert unersetzt(docx(dokument("Alles Anna"))) == []
+    for kaputt in (b"kein zip", b"", None, bytearray(b"zip")):
+        with pytest.raises(ValueError):
+            unersetzt(kaputt)

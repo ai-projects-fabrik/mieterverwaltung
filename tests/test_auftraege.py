@@ -384,3 +384,63 @@ def test_google_vorlage_ohne_geladene_bytes_ist_ein_fehler_und_schreibt_nichts(u
         with pytest.raises(ValueError, match="vorlage"):
             erstelle_vertrag(form, kontext)
     assert keine_dateien(umgebung)
+
+
+def docx_mit_kopfzeile(absaetze, kopf):
+    xml = f'<?xml version="1.0" encoding="UTF-8"?><w:document xmlns:w="{W}"><w:body>'
+    for absatz in absaetze:
+        xml += f'<w:p><w:r><w:t xml:space="preserve">{absatz}</w:t></w:r></w:p>'
+    xml += "</w:body></w:document>"
+    puffer = io.BytesIO()
+    with zipfile.ZipFile(puffer, "w") as paket:
+        paket.writestr("[Content_Types].xml", "<Types/>")
+        paket.writestr("word/document.xml", xml)
+        paket.writestr(
+            "word/header1.xml",
+            f'<w:hdr xmlns:w="{W}"><w:p><w:r><w:t>{kopf}</w:t></w:r></w:p></w:hdr>',
+        )
+    return puffer.getvalue()
+
+
+def kopftext(pfad):
+    with zipfile.ZipFile(pfad) as paket:
+        wurzel = ET.fromstring(paket.read("word/header1.xml"))
+    return "".join(t.text or "" for t in wurzel.iter(f"{{{W}}}t"))
+
+
+def test_kopfzeile_wird_gefuellt(umgebung):
+    vorlage = docx_mit_kopfzeile(VERTRAG, "Vertrag mit {{mieter_name}}")
+    (umgebung["ordner"]["vl"] / "kopf.docx").write_bytes(vorlage)
+    ergebnis = erstelle_vertrag(
+        {**vertragsform(), "vorlage": "lokal:kopf.docx", "mieter_name": "Anna Muster"},
+        umgebung,
+    )
+    ziel = umgebung["ordner"]["al"] / ergebnis["dateien"][0]
+    assert absaetze(ziel)[1] == "Anna Muster"
+    assert kopftext(ziel) == "Vertrag mit Anna Muster"
+
+
+@pytest.mark.parametrize(
+    ("absaetze", "kopf", "stelle"),
+    [
+        ([*VERTRAG, "Nutzer {{Mieter_Name}}"], "Kopf", "Text: {{Mieter_Name}}"),
+        (VERTRAG, "Kopf {{Name des Mieters}}", "Kopfzeile: {{Name des Mieters}}"),
+    ],
+)
+def test_nicht_ersetzte_platzhalter_nennen_stelle_und_schreiben_nichts(
+    umgebung, absaetze, kopf, stelle
+):
+    (umgebung["ordner"]["vl"] / "kaputt.docx").write_bytes(docx_mit_kopfzeile(absaetze, kopf))
+    with pytest.raises(ValueError, match="vorlage") as fehler:
+        erstelle_vertrag({**vertragsform(), "vorlage": "lokal:kaputt.docx"}, umgebung)
+    assert "Nicht ersetzte Platzhalter" in str(fehler.value)
+    assert stelle in str(fehler.value)
+    assert keine_dateien(umgebung)
+
+
+def test_nicht_ersetzte_platzhalter_im_protokoll_schreiben_nichts(umgebung):
+    vorlage = docx_mit_kopfzeile(PROTOKOLL, "Kopf {{Name des Mieters}}")
+    (umgebung["ordner"]["vl"] / "kopf-protokoll.docx").write_bytes(vorlage)
+    with pytest.raises(ValueError, match="Kopfzeile: \\{\\{Name des Mieters\\}\\}"):
+        erstelle_protokoll({**protokollform(), "vorlage": "lokal:kopf-protokoll.docx"}, umgebung)
+    assert keine_dateien(umgebung)
