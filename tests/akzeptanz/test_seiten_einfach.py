@@ -16,6 +16,9 @@ from projekt.seiten_einfach import (  # noqa: E402
     formular_vertrag,
     rahmen_einfach,
 )
+from projekt.felder import FELDER  # noqa: E402
+
+WOHNRAUMNUTZER = "wohnraumnutzer_name" in FELDER  # Ziel `mv-wohnraumnutzer`
 
 OBJEKTE = [
     {"id": "a", "bezeichnung": "Haus <A>", "miete_netto": "1'000.00"},
@@ -129,15 +132,19 @@ def test_objekttabelle_maskiert_und_zeigt_meldung():
 
 def test_vertragsformular_fragt_nur_das_noetige():
     s = lies(formular_vertrag(OBJEKTE, VORLAGEN))
-    assert namen(s) == [
+    erwartet = [
         "objekt_id",
         "vorlage",
         "mieter_name",
+        "wohnraumnutzer_name",
         "mietbeginn",
         "anfrage",
         "format",
         "ziel",
     ]
+    if not WOHNRAUMNUTZER:
+        erwartet.remove("wohnraumnutzer_name")
+    assert namen(s) == erwartet
     assert s.formulare == [("post", "/mietvertrag")]
     for gestrichen in ("miete_netto", "nebenkosten", "kaution", "objekt"):
         assert gestrichen not in namen(s)
@@ -211,3 +218,13 @@ def test_protokollformular():
     assert not any(n in sichtbar for n in ROHE_NAMEN)
     standard = lies(formular_uebergabe(OBJEKTE, VORLAGEN, {"art": "x"}))
     assert [w for w, sel in standard.optionen["art"] if sel] == ["Einzug"]
+
+
+@pytest.mark.skipif(not WOHNRAUMNUTZER, reason="Feld wohnraumnutzer_name noch nicht umgesetzt")
+def test_wohnraumnutzer_nur_im_vertragsformular_mit_beschriftung_und_vorbelegung():
+    html = formular_vertrag(OBJEKTE, VORLAGEN, {"wohnraumnutzer_name": "Karl <K>"})
+    s = lies(html)
+    assert "Name des Wohnraumnutzers" in " ".join(s.text)
+    assert "wohnraumnutzer_name" not in " ".join(s.text)
+    assert "Karl &lt;K&gt;" in html and "Karl <K>" not in html
+    assert "wohnraumnutzer_name" not in namen(lies(formular_uebergabe(OBJEKTE, VORLAGEN)))

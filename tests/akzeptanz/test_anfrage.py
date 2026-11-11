@@ -8,6 +8,7 @@ if importlib.util.find_spec("projekt.anfrage") is None:
     pytest.skip("Modul noch nicht umgesetzt", allow_module_level=True)
 
 from projekt.anfrage import aenderungen_aus_text  # noqa: E402
+from projekt.felder import FELDER  # noqa: E402
 
 MAIL = (
     "Hallo,\n"
@@ -55,3 +56,16 @@ def test_kein_text_ist_value_error():
     for roh in (None, 5, b"Kaution: 1"):
         with pytest.raises(ValueError):
             aenderungen_aus_text(roh)
+
+
+@pytest.mark.skipif(
+    "wohnraumnutzer_name" not in FELDER, reason="Feld wohnraumnutzer_name noch nicht umgesetzt"
+)
+def test_wohnraumnutzer_name_aus_anfrage():
+    text = "Wohnraumnutzer name: Karl Kind\nMieter name: Anna Muster"
+    assert aenderungen_aus_text(text) == {
+        "wohnraumnutzer_name": "Karl Kind",
+        "mieter_name": "Anna Muster",
+    }
+    with pytest.raises(ValueError, match="wohnraumnutzer_name"):
+        aenderungen_aus_text("Wohnraumnutzer name:")

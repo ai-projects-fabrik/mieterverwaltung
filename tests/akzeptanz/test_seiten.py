@@ -8,6 +8,7 @@ import pytest
 if importlib.util.find_spec("projekt.seiten") is None:
     pytest.skip("Modul noch nicht umgesetzt", allow_module_level=True)
 
+from projekt.felder import FELDER  # noqa: E402
 from projekt.seiten import (  # noqa: E402
     TABS,
     ergebnis,
@@ -23,6 +24,8 @@ OBJEKTE = [
 ]
 VORLAGEN = {"lokal": ["vertrag.docx"], "drive": ["drive & co.docx"]}
 VERTRAG_FELDER = ["mieter_name", "objekt", "mietbeginn", "miete_netto", "nebenkosten", "kaution"]
+if "wohnraumnutzer_name" in FELDER:  # Ziel `mv-wohnraumnutzer`
+    VERTRAG_FELDER.insert(1, "wohnraumnutzer_name")
 PROTOKOLL_FELDER = [
     "mieter_name",
     "objekt",
