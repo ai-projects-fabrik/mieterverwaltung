@@ -7,7 +7,7 @@ from pathlib import Path
 from urllib.parse import parse_qsl
 
 from projekt.ablage import liste_vorlagen
-from projekt.auftraege import erstelle_protokoll, erstelle_vertrag
+from projekt.auftraege import erstelle_protokoll, erstelle_vertrag, protokoll_werte
 from projekt.auswahl import auswahl_pfad, lade_auswahl, speichere_auswahl
 from projekt.einstellungen import lade_einstellungen, ordner, speichere_einstellungen
 from projekt.objekte import lade_objekte, speichere_objekte
@@ -295,9 +295,19 @@ def _auftrag_seite(
     pdf_auftrag = auftrag.get("pdf_auftrag")
     if pdf_auftrag is not None:
         dateien.append(pdf_auftrag)
-    text = "Dateien angelegt" if protokoll else auftrag.get("bericht", "")
+    if protokoll:
+        text = "Dateien angelegt"
+        try:
+            werte = protokoll_werte(form, auftrags_kontext)
+        except (OSError, TypeError, ValueError):
+            werte = None
+    else:
+        text = auftrag.get("bericht", "")
+        if text == "keine Aenderungen":
+            text = ""
+        werte = auftrag.get("werte")
     titel = "Uebergabeprotokoll erstellt" if protokoll else "Mietvertrag erstellt"
-    inhalt = ergebnis(titel, text, dateien, auftrag.get("hinweis", ""))
+    inhalt = ergebnis(titel, text, dateien, auftrag.get("hinweis", ""), werte=werte)
 
     try:
         speichere_auswahl(
