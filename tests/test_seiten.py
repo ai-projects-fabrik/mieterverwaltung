@@ -235,3 +235,52 @@ def test_ergebnis_hinweis_ist_optional_und_maskiert():
     with_hinweis = ergebnis("T", "b", [], hinweis="PDF <bald> in Google Drive")
     assert "<bald>" not in with_hinweis
     assert "PDF <bald> in Google Drive" in "".join(Seite(with_hinweis).texte)
+
+
+def test_ergebnis_zeigt_werte_mit_anzeigename_und_quelle_maskiert():
+    werte = [
+        {"feld": "mieter_name", "wert": "Anna <Muster>", "herkunft": "formular"},
+        {"feld": "miete_netto", "wert": "1'800.00", "herkunft": "objekt"},
+        {"feld": "kaution", "wert": "4'000.00", "herkunft": "anfrage"},
+        {"feld": "unbekannt_x", "wert": "7 & 8", "herkunft": "formular"},
+    ]
+    html = ergebnis("Titel", "bericht", ["a.docx"], werte=werte)
+    assert '<ul class="werte">' in html
+    assert "<Muster>" not in html
+    assert "7 & 8" not in html
+    seite = Seite(html)
+    assert [zeile for zeile in seite.texte if "(aus " in zeile] == [
+        "Name des Mieters: Anna <Muster> (aus Formular)",
+        "Miete: 1'800.00 (aus Objekt)",
+        "Kaution: 4'000.00 (aus Änderungen)",
+        "unbekannt_x: 7 & 8 (aus Formular)",
+    ]
+    assert seite.tags.count("li") == 5
+
+
+def test_ergebnis_zeigt_deutsche_protokollnamen():
+    werte = [
+        {"feld": "uebergabedatum", "wert": "01.02.2026", "herkunft": "formular"},
+        {"feld": "zaehler_strom", "wert": "1234.5", "herkunft": "formular"},
+        {"feld": "schluessel_anzahl", "wert": "3", "herkunft": "formular"},
+        {"feld": "unbekannt_x", "wert": "7", "herkunft": "objekt"},
+    ]
+    texte = Seite(ergebnis("T", "", [], werte=werte)).texte
+    assert [zeile for zeile in texte if "(aus " in zeile] == [
+        "Übergabedatum: 01.02.2026 (aus Formular)",
+        "Zählerstand Strom: 1234.5 (aus Formular)",
+        "Anzahl Schlüssel: 3 (aus Formular)",
+        "unbekannt_x: 7 (aus Objekt)",
+    ]
+
+
+def test_ergebnis_laesst_leeren_bericht_nur_mit_werten_weg():
+    ohne_bericht = Seite(ergebnis("T", "", [], werte=[]))
+    assert "pre" not in ohne_bericht.tags
+    assert "li" not in ohne_bericht.tags
+
+    mit_bericht = Seite(ergebnis("T", "x", [], werte=[]))
+    assert "pre" in mit_bericht.tags
+
+    ohne_werte = Seite(ergebnis("T", "", []))
+    assert "pre" in ohne_werte.tags

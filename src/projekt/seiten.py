@@ -18,6 +18,25 @@ _FORMATE = ("docx", "pdf", "docx+pdf")
 _ZIELE = ("lokal", "drive")
 _VORLAGEN_ORTE = (("lokal", "Festplatte"), ("drive", "Google Drive"))
 
+_ANZEIGENAMEN = {
+    "mieter_name": "Name des Mieters",
+    "wohnraumnutzer_name": "Name des Wohnraumnutzers",
+    "objekt": "Objekt",
+    "mietbeginn": "Mietbeginn",
+    "mietende": "Mietende",
+    "miete_netto": "Miete",
+    "nebenkosten": "Nebenkosten",
+    "kaution": "Kaution",
+    "uebergabedatum": "Übergabedatum",
+    "art": "Art",
+    "zaehler_strom": "Zählerstand Strom",
+    "zaehler_wasser": "Zählerstand Wasser",
+    "schluessel_anzahl": "Anzahl Schlüssel",
+    "bemerkungen": "Bemerkungen",
+}
+
+_QUELLEN = {"formular": "Formular", "objekt": "Objekt", "anfrage": "Änderungen"}
+
 
 def _text(wert: object) -> str:
     return "" if wert is None else str(wert)
@@ -253,11 +272,36 @@ def formular_settings(
     )
 
 
-def ergebnis(titel: str, text: str, dateien: list[str], hinweis: str = "") -> str:
-    """Erzeugt die maskierte Ergebnisseite mit Bericht, Dateien und Hinweis."""
+def _werte_liste(werte: list[dict]) -> str:
+    eintraege = []
+    for eintrag in werte:
+        feld = _text(eintrag.get("feld", ""))
+        name = _ANZEIGENAMEN.get(feld, feld)
+        herkunft = _text(eintrag.get("herkunft", ""))
+        quelle = _QUELLEN.get(herkunft, herkunft)
+        wert = _text(eintrag.get("wert", ""))
+        eintraege.append(f"<li>{_maskiert(name)}: {_maskiert(wert)} (aus {_maskiert(quelle)})</li>")
+    return '<ul class="werte">' + "".join(eintraege) + "</ul>"
+
+
+def ergebnis(
+    titel: str,
+    text: str,
+    dateien: list[str],
+    hinweis: str = "",
+    werte: list[dict] | None = None,
+) -> str:
+    """Erzeugt die maskierte Ergebnisseite mit Bericht, Werten, Dateien und Hinweis.
+
+    ``werte`` enthaelt je Eintrag Feldname, Wert und Herkunft. Mit ``werte``
+    erscheint eine Liste der eingesetzten Werte; ein leerer Bericht entfaellt
+    dann. Ohne ``werte`` bleibt der Bericht wie bisher immer sichtbar.
+    """
 
     dateiliste = ""
     if dateien:
         dateiliste = "<ul>" + "".join(f"<li>{_maskiert(datei)}</li>" for datei in dateien) + "</ul>"
     hinweistext = f'<p class="hinweis">{_maskiert(hinweis)}</p>' if hinweis else ""
-    return f"<h1>{_maskiert(titel)}</h1><pre>{_maskiert(text)}</pre>{dateiliste}{hinweistext}"
+    bericht = f"<pre>{_maskiert(text)}</pre>" if text or werte is None else ""
+    werteliste = _werte_liste(werte) if werte is not None else ""
+    return f"<h1>{_maskiert(titel)}</h1>{bericht}{werteliste}{dateiliste}{hinweistext}"
