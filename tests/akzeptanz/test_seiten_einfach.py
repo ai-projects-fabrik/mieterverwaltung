@@ -19,6 +19,7 @@ from projekt.seiten_einfach import (  # noqa: E402
 from projekt.felder import FELDER  # noqa: E402
 
 WOHNRAUMNUTZER = "wohnraumnutzer_name" in FELDER  # Ziel `mv-wohnraumnutzer`
+MIETENDE = "mietende" in FELDER  # Ziel `mv-feld-mietende`
 
 OBJEKTE = [
     {"id": "a", "bezeichnung": "Haus <A>", "miete_netto": "1'000.00"},
@@ -138,12 +139,15 @@ def test_vertragsformular_fragt_nur_das_noetige():
         "mieter_name",
         "wohnraumnutzer_name",
         "mietbeginn",
+        "mietende",
         "anfrage",
         "format",
         "ziel",
     ]
     if not WOHNRAUMNUTZER:
         erwartet.remove("wohnraumnutzer_name")
+    if not MIETENDE:
+        erwartet.remove("mietende")
     assert namen(s) == erwartet
     assert s.formulare == [("post", "/mietvertrag")]
     for gestrichen in ("miete_netto", "nebenkosten", "kaution", "objekt"):
@@ -228,3 +232,13 @@ def test_wohnraumnutzer_nur_im_vertragsformular_mit_beschriftung_und_vorbelegung
     assert "wohnraumnutzer_name" not in " ".join(s.text)
     assert "Karl &lt;K&gt;" in html and "Karl <K>" not in html
     assert "wohnraumnutzer_name" not in namen(lies(formular_uebergabe(OBJEKTE, VORLAGEN)))
+
+
+@pytest.mark.skipif(not MIETENDE, reason="Feld mietende noch nicht umgesetzt")
+def test_mietende_nur_im_vertragsformular_mit_beschriftung_und_vorbelegung():
+    html = formular_vertrag(OBJEKTE, VORLAGEN, {"mietende": "31.12.2027"})
+    s = lies(html)
+    assert "Mietende" in " ".join(s.text)
+    assert "mietende" not in " ".join(s.text)
+    assert "31.12.2027" in html
+    assert "mietende" not in namen(lies(formular_uebergabe(OBJEKTE, VORLAGEN)))

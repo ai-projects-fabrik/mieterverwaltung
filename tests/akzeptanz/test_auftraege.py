@@ -319,6 +319,35 @@ def test_wohnraumnutzer_aus_der_anfrage_erscheint_im_bericht(kontext):
     assert absaetze(kontext["ordner"]["al"] / "vertrag-bert-beispiel.docx")[-1] == "Nutzer: Karl"
 
 
+# --- Ziel `mv-feld-mietende`: optionales Datum, Platzhalter {{mietende}} ---
+
+MIETENDE = pytest.mark.skipif("mietende" not in FELDER, reason="Feld mietende noch nicht umgesetzt")
+
+
+@MIETENDE
+def test_mietende_wird_im_vertrag_ersetzt_und_ist_ein_datum(kontext):
+    (kontext["ordner"]["vl"] / "mit-ende.docx").write_bytes(
+        docx_bytes([*VERTRAG, "Ende: {{mietende}}"])
+    )
+    form = {**basis(), "vorlage": "lokal:mit-ende.docx", "mietende": "2027-12-31"}
+    erstelle_vertrag(form, kontext)
+    text = absaetze(kontext["ordner"]["al"] / "vertrag-bert-beispiel.docx")
+    assert text[1] == "Mieter: Bert Beispiel, Beginn 01.01.2026"
+    assert text[-1] == "Ende: 31.12.2027"
+    with pytest.raises(ValueError, match="mietende"):
+        erstelle_vertrag({**form, "mietende": "bald"}, kontext)
+
+
+@MIETENDE
+def test_mietende_ist_optional_ausser_die_vorlage_verlangt_es(kontext):
+    erstelle_vertrag(basis(), kontext)  # Vorlage ohne Platzhalter, Feld nicht angegeben
+    (kontext["ordner"]["vl"] / "mit-ende.docx").write_bytes(
+        docx_bytes([*VERTRAG, "Ende: {{mietende}}"])
+    )
+    with pytest.raises(ValueError, match="mietende"):
+        erstelle_vertrag({**basis(), "vorlage": "lokal:mit-ende.docx"}, kontext)
+
+
 # --- Ziel `mv-docx-teile`: Name im erzeugten Dokument, uebrige Platzhalter sind ein Fehler ---
 
 TEILE = pytest.mark.skipif(

@@ -69,3 +69,11 @@ def test_wohnraumnutzer_name_aus_anfrage():
     }
     with pytest.raises(ValueError, match="wohnraumnutzer_name"):
         aenderungen_aus_text("Wohnraumnutzer name:")
+
+
+@pytest.mark.skipif("mietende" not in FELDER, reason="Feld mietende noch nicht umgesetzt")
+def test_mietende_aus_anfrage():
+    text = "Mietende: 2027-12-31\nMietbeginn: 1.1.2027"
+    assert aenderungen_aus_text(text) == {"mietende": "31.12.2027", "mietbeginn": "01.01.2027"}
+    with pytest.raises(ValueError, match="mietende"):
+        aenderungen_aus_text("Mietende: irgendwann")
