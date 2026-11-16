@@ -263,6 +263,13 @@ elif a[:2] == ["pr", "merge"] and "--disable-auto" in a:
 elif a[:2] == ["pr", "merge"] and "--auto" in a:
     if hat("fail_merge"):
         fehler("HTTP 403: Resource not accessible by integration", 1)
+    if hat("merge_expected_immer") or (hat("merge_expected_1x") and not geschrieben("expected")):
+        log("expected")
+        fehler(
+            "GraphQL: Repository rule violations found\n\n"
+            'Required status check "agent-gate" is expected.\n',
+            1,
+        )
     log("auto " + a[a.index("--match-head-commit") + 1])
     log("tok merge-auto " + wer())
 elif a[:2] == ["label", "create"]:

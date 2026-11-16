@@ -2333,7 +2333,7 @@ R(
         "G1 Token: Draft -> ready und merge mit App-Token",
         "pass",
         prd=pr(draft=True),
-        toks=[CHK, READY_APP, MERGE_APP],
+        toks=[CHK, READY_APP, CHK, MERGE_APP],
         writes=["ready"] + A,
     )
 )
@@ -2432,6 +2432,35 @@ R(
         mtoken="",
         toks=["tok merge-disable default", CHK],
         writes=D,
+    )
+)
+R(
+    lauf(
+        "Merge: agent-gate is expected nach Ready -> erneut melden, zweiter Versuch merged",
+        "pass",
+        prd=pr(draft=True),
+        marker=("merge_expected_1x",),
+        writes=["ready", "expected", *A],
+        check=["check success", "check success", "check success"],
+        stdout=["erneut melden und wiederholen (1/3)"],
+    )
+)
+R(
+    lauf(
+        "Merge: agent-gate bleibt expected -> nach 3 Wiederholungen Exit 1, nichts gemergt",
+        "fail",
+        marker=("merge_expected_immer",),
+        writes=["expected"] * 4,
+        stdout=["(3/3)"],
+    )
+)
+R(
+    lauf(
+        "Merge: Draft meldet agent-gate nach dem Ready-Wechsel erneut",
+        "pass",
+        prd=pr(draft=True),
+        writes=["ready", *A],
+        check=["check success", "check success"],
     )
 )
 R(
